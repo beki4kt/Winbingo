@@ -65,8 +65,8 @@
     "react": "https://esm.sh/react@^19.2.3",
     "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
     "react/": "https://esm.sh/react@^19.2.3/",
-    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2",
-    "vite": "https://esm.sh/vite@^7.3.0"
+    "vite": "https://esm.sh/vite@^7.3.0",
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2"
   }
 }
 </script>
@@ -88,12 +88,11 @@
           setTimeout(() => loader.style.display = 'none', 300);
         }
       };
-      
-      // Safety timeout
+      // Auto-hide after 5 seconds if React takes too long
       setTimeout(window.hideAppLoader, 5000);
     </script>
     
-    <!-- Vite will handle this script tag and compile index.tsx -->
+    <!-- Vite entry point -->
     <script type="module" src="/index.tsx"></script>
 </body>
 </html>
