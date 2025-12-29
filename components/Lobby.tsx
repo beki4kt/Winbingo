@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { generateFairBoard } from '../utils';
+import { generateFairBoard } from '../utils.ts';
 
 interface LobbyProps {
   onStartGame: (num: number, stake: number, roomId: string) => void;
@@ -59,8 +59,6 @@ const Lobby: React.FC<LobbyProps> = ({ onStartGame, selectedNumber, setSelectedN
 
   return (
     <div className={`flex flex-col min-h-full ${containerColor} animate-fadeIn relative pb-96 transition-colors duration-500`}>
-      
-      {/* Stake Selection */}
       <div className="px-4 py-2">
         <div className={`flex justify-between items-center ${isDarkMode ? 'bg-black/40' : 'bg-black/10'} rounded-2xl p-1`}>
           {stakes.map(s => (
@@ -78,7 +76,6 @@ const Lobby: React.FC<LobbyProps> = ({ onStartGame, selectedNumber, setSelectedN
         </div>
       </div>
 
-      {/* 1-100 Grid Area */}
       <div className="flex-1 px-4 py-2 overflow-visible">
         <div className={`${gridCardColor} p-4 rounded-[2.5rem] border border-white/10 shadow-xl`}>
           <div className="grid grid-cols-10 gap-1.5 justify-items-center">
@@ -105,16 +102,11 @@ const Lobby: React.FC<LobbyProps> = ({ onStartGame, selectedNumber, setSelectedN
         </div>
       </div>
 
-      {/* Floating Preview - Theme Matched */}
       {selectedNumber && (
         <div className="fixed bottom-[180px] left-6 z-20 animate-fadeIn pointer-events-none origin-bottom-left">
           <div className={`${isDarkMode ? 'bg-gray-900 ring-indigo-500/50' : 'bg-white/95 ring-purple-200'} backdrop-blur-md p-2.5 rounded-2xl border-2 border-white/20 shadow-[0_15px_35px_rgba(0,0,0,0.5)] w-32 ring-1`}>
             <div className="flex justify-between items-center mb-1.5 px-0.5">
               <p className={`text-[8px] font-black uppercase ${isDarkMode ? 'text-indigo-400' : 'text-purple-900'} tracking-tighter`}>Card #{selectedNumber}</p>
-              <div className="flex gap-[1.5px]">
-                <div className={`w-1.5 h-1.5 rounded-full ${isDarkMode ? 'bg-indigo-400' : 'bg-purple-400'}`}></div>
-                <div className={`w-1.5 h-1.5 rounded-full ${isDarkMode ? 'bg-indigo-600' : 'bg-purple-600'}`}></div>
-              </div>
             </div>
             <div className="grid grid-cols-5 gap-1">
               {previewBoard?.flat().map((val, i) => (
@@ -135,28 +127,10 @@ const Lobby: React.FC<LobbyProps> = ({ onStartGame, selectedNumber, setSelectedN
         </div>
       )}
 
-      {/* Action Bar */}
       <div className="fixed bottom-[100px] left-0 right-0 px-6 flex gap-4 justify-center items-center z-30">
-        <button 
-          onClick={handleRefresh}
-          className="flex-1 bg-[#4b91f7] text-white py-4 rounded-2xl font-black text-sm shadow-xl active:scale-95 transition-all uppercase tracking-wide border-b-4 border-blue-600"
-        >
-          Refresh
-        </button>
-        
-        <button 
-          onClick={handleStartGameClick}
-          disabled={selectedNumber === null || loading}
-          className={`flex-1 py-4 rounded-2xl font-black text-sm shadow-xl transition-all active:scale-95 uppercase tracking-wide border-b-4
-            ${selectedNumber === null || loading
-              ? 'bg-[#f07156]/40 text-white/50 cursor-not-allowed border-red-900/10' 
-              : 'bg-[#f07156] text-white ring-2 ring-white/10 border-red-700'}`}
-        >
-          {loading ? (
-            <i className="fas fa-circle-notch animate-spin"></i>
-          ) : (
-            'Start Game'
-          )}
+        <button onClick={handleRefresh} className="flex-1 bg-[#4b91f7] text-white py-4 rounded-2xl font-black text-sm shadow-xl active:scale-95 transition-all uppercase border-b-4 border-blue-600">Refresh</button>
+        <button onClick={handleStartGameClick} disabled={selectedNumber === null || loading} className={`flex-1 py-4 rounded-2xl font-black text-sm shadow-xl transition-all active:scale-95 uppercase border-b-4 ${selectedNumber === null || loading ? 'bg-[#f07156]/40 text-white/50 border-red-900/10' : 'bg-[#f07156] text-white border-red-700'}`}>
+          {loading ? <i className="fas fa-circle-notch animate-spin"></i> : 'Start Game'}
         </button>
       </div>
     </div>

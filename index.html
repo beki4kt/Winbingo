@@ -58,7 +58,7 @@
         left: 0;
         width: 100%;
         height: 100%;
-        background: rgba(162, 140, 209, 0.95);
+        background: rgba(162, 140, 209, 0.98);
         color: white;
         display: none;
         flex-direction: column;
@@ -85,28 +85,32 @@
 <body>
     <div id="root"></div>
     <div id="error-overlay">
-        <i class="fas fa-exclamation-circle" style="font-size: 48px; margin-bottom: 20px;"></i>
-        <h2 style="font-weight: 900; text-transform: uppercase; margin-bottom: 10px;">Runtime Error</h2>
-        <pre id="error-message" style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 10px; max-width: 90%; overflow-x: auto; font-size: 12px;"></pre>
-        <button onclick="window.location.reload()" style="margin-top: 20px; padding: 12px 24px; background: white; color: #a28cd1; border: none; border-radius: 12px; font-weight: 900; cursor: pointer;">RELOAD APP</button>
+        <i class="fas fa-exclamation-triangle" style="font-size: 48px; margin-bottom: 20px; color: #fbbf24;"></i>
+        <h2 style="font-weight: 900; text-transform: uppercase; margin-bottom: 10px;">Connection Error</h2>
+        <div id="error-message" style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 10px; max-width: 90%; overflow-x: auto; font-size: 13px; font-family: monospace; white-space: pre-wrap; text-align: left; border: 1px solid rgba(255,255,255,0.1);">Initializing module...</div>
+        <div style="margin-top: 20px; font-size: 11px; opacity: 0.7; max-width: 300px;">
+          If this persists on GitHub Pages, the browser is likely blocking .tsx files. You may need a build step or a loader like esm.sh/run.
+        </div>
+        <button onclick="window.location.reload()" style="margin-top: 25px; padding: 12px 24px; background: white; color: #a28cd1; border: none; border-radius: 12px; font-weight: 900; cursor: pointer; box-shadow: 0 4px 15px rgba(0,0,0,0.2);">RELOAD PAGE</button>
     </div>
 
     <script>
-        // Global error catcher to show errors on the screen if the app fails to mount
-        window.onerror = function(message, source, lineno, colno, error) {
-            const overlay = document.getElementById('error-overlay');
-            const msg = document.getElementById('error-message');
-            overlay.style.display = 'flex';
-            msg.textContent = `${message}\nat ${source}:${lineno}:${colno}`;
-            return false;
-        };
-        window.addEventListener('unhandledrejection', function(event) {
-            const overlay = document.getElementById('error-overlay');
-            const msg = document.getElementById('error-message');
-            overlay.style.display = 'flex';
-            msg.textContent = `Unhandled Promise Rejection: ${event.reason}`;
-        });
+        const overlay = document.getElementById('error-overlay');
+        const msg = document.getElementById('error-message');
+
+        function showError(text) {
+          overlay.style.display = 'flex';
+          msg.textContent = text;
+        }
+
+        window.onerror = (m, s, l, c, e) => showError(`Error: ${m}\nSource: ${s}\nLine: ${l}`);
+        window.onunhandledrejection = (e) => showError(`Promise Rejection: ${e.reason}`);
     </script>
-    <script type="module" src="./index.tsx"></script>
+    
+    <script 
+      type="module" 
+      src="./index.tsx" 
+      onerror="showError('Failed to load index.tsx.\n\nPossible reasons:\n1. GitHub Pages is serving .tsx as text/plain (MIME type error).\n2. The file path is incorrect for this subdirectory.\n3. The browser does not support native TSX execution.')"
+    ></script>
 </body>
 </html>
