@@ -26,11 +26,23 @@ const App: React.FC = () => {
   const [isDarkMode, setIsDarkMode] = useState<boolean>(false);
 
   useEffect(() => {
-    // Notify Telegram if dark mode changes
+    // Initialize Telegram WebApp
     if (window.Telegram && window.Telegram.WebApp) {
+      const tg = window.Telegram.WebApp;
+      tg.ready();
+      tg.expand();
+
       const color = isDarkMode ? '#0f172a' : '#a28cd1';
-      window.Telegram.WebApp.setHeaderColor(color);
-      window.Telegram.WebApp.setBackgroundColor(color);
+      
+      // Version 6.1+ is required for setHeaderColor/setBackgroundColor without warnings
+      if (tg.isVersionAtLeast && tg.isVersionAtLeast('6.1')) {
+        try {
+          if (typeof tg.setHeaderColor === 'function') tg.setHeaderColor(color);
+          if (typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(color);
+        } catch (e) {
+          console.warn("Telegram theme updates failed", e);
+        }
+      }
     }
   }, [isDarkMode]);
 
@@ -44,8 +56,10 @@ const App: React.FC = () => {
       return;
     }
     
-    // Telegram Haptic
-    window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('medium');
+    // Telegram Haptic - safe check
+    if (window.Telegram?.WebApp?.HapticFeedback?.impactOccurred) {
+      window.Telegram.WebApp.HapticFeedback.impactOccurred('medium');
+    }
 
     setWalletBalance(prev => prev - stake);
     const newSession = { roomId, boardNumber: num, stake };
@@ -56,7 +70,9 @@ const App: React.FC = () => {
   };
 
   const handleLeaveGame = (roomId: string) => {
-    window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('warning');
+    if (window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred) {
+      window.Telegram.WebApp.HapticFeedback.notificationOccurred('warning');
+    }
     const updated = activeSessions.filter(s => s.roomId !== roomId);
     setActiveSessions(updated);
     if (updated.length === 0) {
@@ -146,7 +162,9 @@ const App: React.FC = () => {
           onReturnToGame={returnToGame}
           isDarkMode={isDarkMode}
           toggleTheme={() => {
-            window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light');
+            if (window.Telegram?.WebApp?.HapticFeedback?.impactOccurred) {
+              window.Telegram.WebApp.HapticFeedback.impactOccurred('light');
+            }
             setIsDarkMode(!isDarkMode);
           }}
         />
@@ -160,7 +178,9 @@ const App: React.FC = () => {
         <Navigation 
           currentView={currentView} 
           setView={(v) => {
-            window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light');
+            if (window.Telegram?.WebApp?.HapticFeedback?.impactOccurred) {
+              window.Telegram.WebApp.HapticFeedback.impactOccurred('light');
+            }
             setCurrentView(v);
           }} 
           isDarkMode={isDarkMode} 
