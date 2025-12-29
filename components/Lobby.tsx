@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { generateFairBoard } from '../utils';
+import { generateFairBoard } from '../utils.ts';
 
 interface LobbyProps {
   onStartGame: (num: number, stake: number, roomId: string) => void;

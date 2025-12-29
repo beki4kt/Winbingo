@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { generateFairBoard, checkBingoWin } from '../utils';
+import { generateFairBoard, checkBingoWin } from '../utils.ts';
 
 interface GameRoomProps {
   onLeave: () => void;

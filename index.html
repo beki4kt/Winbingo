@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -20,6 +21,11 @@
         min-height: 100vh;
         color: #000000;
         overflow: hidden;
+        transition: background-color 0.5s ease;
+      }
+
+      body.dark-theme {
+        background-color: #0f172a;
       }
 
       #root {
@@ -52,7 +58,8 @@
     "react": "https://esm.sh/react@19.2.3",
     "react/": "https://esm.sh/react@19.2.3/",
     "react-dom": "https://esm.sh/react-dom@19.2.3",
-    "react-dom/": "https://esm.sh/react-dom@19.2.3/"
+    "react-dom/": "https://esm.sh/react-dom@19.2.3/",
+    "react-dom/client": "https://esm.sh/react-dom@19.2.3/client"
   }
 }
 </script>
