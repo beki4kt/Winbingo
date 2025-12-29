@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Win Bingo</title>
+    <title>Win Bingo | Secure Gaming</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -12,20 +12,14 @@
       
       :root {
         font-family: 'Inter', sans-serif;
-        background-color: #a28cd1;
       }
 
       body {
         margin: 0;
-        background-color: #a28cd1;
+        background-color: #0f172a; /* Professional Slate */
         min-height: 100vh;
-        color: #000000;
+        color: #f8fafc;
         overflow: hidden;
-        transition: background-color 0.5s ease;
-      }
-
-      body.dark-theme {
-        background-color: #0f172a;
       }
 
       #root {
@@ -40,77 +34,58 @@
         background: transparent;
       }
       .custom-scrollbar::-webkit-scrollbar-thumb {
-        background: rgba(0,0,0,0.1);
+        background: rgba(255,255,255,0.1);
         border-radius: 10px;
       }
 
       @keyframes fadeIn {
-        from { opacity: 0; transform: translateY(10px); }
-        to { opacity: 1; transform: translateY(0); }
+        from { opacity: 0; }
+        to { opacity: 1; }
       }
       .animate-fadeIn {
-        animation: fadeIn 0.3s ease-out forwards;
+        animation: fadeIn 0.4s ease-out forwards;
       }
 
-      #error-overlay {
+      #loading-overlay {
         position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(162, 140, 209, 0.98);
-        color: white;
-        display: none;
+        inset: 0;
+        background: #0f172a;
+        display: flex;
         flex-direction: column;
         justify-content: center;
         align-items: center;
-        z-index: 9999;
-        padding: 20px;
-        text-align: center;
-        font-family: sans-serif;
+        z-index: 10000;
+        color: #94a3b8;
       }
     </style>
 <script type="importmap">
 {
   "imports": {
-    "react": "https://esm.sh/react@19.2.3",
-    "react/": "https://esm.sh/react@19.2.3/",
-    "react-dom": "https://esm.sh/react-dom@19.2.3",
-    "react-dom/": "https://esm.sh/react-dom@19.2.3/",
-    "react-dom/client": "https://esm.sh/react-dom@19.2.3/client"
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react": "https://esm.sh/react@^19.2.3",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/"
   }
 }
 </script>
 </head>
 <body>
-    <div id="root"></div>
-    <div id="error-overlay">
-        <i class="fas fa-exclamation-triangle" style="font-size: 48px; margin-bottom: 20px; color: #fbbf24;"></i>
-        <h2 style="font-weight: 900; text-transform: uppercase; margin-bottom: 10px;">Connection Error</h2>
-        <div id="error-message" style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 10px; max-width: 90%; overflow-x: auto; font-size: 13px; font-family: monospace; white-space: pre-wrap; text-align: left; border: 1px solid rgba(255,255,255,0.1);">Initializing module...</div>
-        <div style="margin-top: 20px; font-size: 11px; opacity: 0.7; max-width: 300px;">
-          If this persists on GitHub Pages, the browser is likely blocking .tsx files. You may need a build step or a loader like esm.sh/run.
-        </div>
-        <button onclick="window.location.reload()" style="margin-top: 25px; padding: 12px 24px; background: white; color: #a28cd1; border: none; border-radius: 12px; font-weight: 900; cursor: pointer; box-shadow: 0 4px 15px rgba(0,0,0,0.2);">RELOAD PAGE</button>
+    <div id="loading-overlay">
+        <div class="w-12 h-12 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin mb-4"></div>
+        <p class="text-[10px] font-black uppercase tracking-[0.3em]">Initializing Secure Engine</p>
     </div>
 
-    <script>
-        const overlay = document.getElementById('error-overlay');
-        const msg = document.getElementById('error-message');
+    <div id="root"></div>
 
-        function showError(text) {
-          overlay.style.display = 'flex';
-          msg.textContent = text;
-        }
-
-        window.onerror = (m, s, l, c, e) => showError(`Error: ${m}\nSource: ${s}\nLine: ${l}`);
-        window.onunhandledrejection = (e) => showError(`Promise Rejection: ${e.reason}`);
+    <!-- esm.sh/run allows us to run .tsx directly in the browser by transpiling on-the-fly -->
+    <script type="module">
+      import "https://esm.sh/run";
+      // Hide loader once app is likely initialized
+      setTimeout(() => {
+        const loader = document.getElementById('loading-overlay');
+        if (loader) loader.style.display = 'none';
+      }, 2500);
     </script>
     
-    <script 
-      type="module" 
-      src="./index.tsx" 
-      onerror="showError('Failed to load index.tsx.\n\nPossible reasons:\n1. GitHub Pages is serving .tsx as text/plain (MIME type error).\n2. The file path is incorrect for this subdirectory.\n3. The browser does not support native TSX execution.')"
-    ></script>
+    <script type="module" src="./index.tsx"></script>
 </body>
 </html>
