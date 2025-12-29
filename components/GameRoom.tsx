@@ -1,8 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { generateFairBoard, checkBingoWin } from '../utils.ts';
-// Import types to resolve global window.Telegram reference errors
-import '../types.ts';
+import { generateFairBoard, checkBingoWin } from '../utils';
 
 interface GameRoomProps {
   onLeave: () => void;
@@ -63,7 +61,6 @@ const GameRoom: React.FC<GameRoomProps> = ({ onLeave, boardNumber, stake, balanc
 
   const handleMark = (num: number | string) => {
     if (gameState !== 'running' || num === '*') return;
-    // Trigger Telegram Haptic Feedback
     window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light');
     setMarkedNumbers(prev => prev.includes(num as any) ? prev.filter(n => n !== num) : [...prev, num as any]);
   };
@@ -71,13 +68,11 @@ const GameRoom: React.FC<GameRoomProps> = ({ onLeave, boardNumber, stake, balanc
   const handleBingoClick = () => {
     const win = checkBingoWin(cardMatrix, markedNumbers);
     if (win) {
-      // Trigger Telegram Success Notification
       window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success');
       setBalance(balance + DERASH);
       setWinInfo(win);
       setGameState('ended');
     } else {
-      // Trigger Telegram Error Notification
       window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('error');
       alert("No Bingo detected! Check your card again.");
     }

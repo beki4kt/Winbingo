@@ -1,14 +1,14 @@
 
 import React, { useState, useEffect } from 'react';
-import { View } from './types.ts';
-import Lobby from './components/Lobby.tsx';
-import GameRoom from './components/GameRoom.tsx';
-import Wallet from './components/Wallet.tsx';
-import Navigation from './components/Navigation.tsx';
-import Header from './components/Header.tsx';
-import Admin from './components/Admin.tsx';
-import Leaderboard from './components/Leaderboard.tsx';
-import History from './components/History.tsx';
+import { View } from './types';
+import Lobby from './components/Lobby';
+import GameRoom from './components/GameRoom';
+import Wallet from './components/Wallet';
+import Navigation from './components/Navigation';
+import Header from './components/Header';
+import Admin from './components/Admin';
+import Leaderboard from './components/Leaderboard';
+import History from './components/History';
 
 interface ActiveSession {
   roomId: string;
@@ -34,7 +34,6 @@ const App: React.FC = () => {
 
       const color = isDarkMode ? '#0f172a' : '#a28cd1';
       
-      // Version 6.1+ is required for setHeaderColor/setBackgroundColor without warnings
       if (tg.isVersionAtLeast && tg.isVersionAtLeast('6.1')) {
         try {
           if (typeof tg.setHeaderColor === 'function') tg.setHeaderColor(color);
@@ -56,7 +55,6 @@ const App: React.FC = () => {
       return;
     }
     
-    // Telegram Haptic - safe check
     if (window.Telegram?.WebApp?.HapticFeedback?.impactOccurred) {
       window.Telegram.WebApp.HapticFeedback.impactOccurred('medium');
     }
