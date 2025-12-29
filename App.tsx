@@ -23,13 +23,19 @@ const App: React.FC = () => {
   const [activeSessions, setActiveSessions] = useState<ActiveSession[]>([]);
   const [selectedSessionIdx, setSelectedSessionIdx] = useState<number>(0);
   const [selectedNumber, setSelectedNumber] = useState<number | null>(null);
-  
-  // Forced Dark Mode for professional look
-  const isDarkMode = true;
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (isDarkMode) {
+      document.body.style.backgroundColor = '#0f172a';
+    } else {
+      document.body.style.backgroundColor = '#a28cd1';
+    }
+  }, [isDarkMode]);
 
   const handleJoinGame = (num: number, stake: number, roomId: string) => {
     if (walletBalance < stake) {
-      alert("Insufficient balance for this stake.");
+      alert("Insufficient balance! Please deposit funds.");
       return;
     }
     
@@ -96,19 +102,19 @@ const App: React.FC = () => {
       case View.PROFILE:
         return (
           <div className="p-8 text-white text-center animate-fadeIn min-h-full">
-            <div className="w-24 h-24 bg-indigo-500/10 rounded-full mx-auto mb-4 flex items-center justify-center border border-white/10 shadow-lg">
-              <i className="fas fa-user-shield text-4xl text-indigo-400"></i>
+            <div className={`w-24 h-24 ${isDarkMode ? 'bg-indigo-500/20' : 'bg-white/20'} rounded-full mx-auto mb-4 flex items-center justify-center border-4 border-white/10 shadow-lg`}>
+              <i className="fas fa-user text-4xl text-white"></i>
             </div>
-            <h2 className="text-xl font-black mb-1 uppercase tracking-tight">Verified Account</h2>
-            <p className="text-white/40 text-[10px] mb-8 font-bold uppercase tracking-widest">ID: 99281734</p>
-            <div className="bg-slate-900 rounded-3xl p-6 text-left space-y-4 border border-white/5">
-              <div className="flex justify-between text-[11px] uppercase font-bold tracking-wider">
-                <span className="opacity-50">Total Events</span>
-                <span>142</span>
+            <h2 className="text-2xl font-black mb-1">Win Player</h2>
+            <p className="text-white/60 text-xs mb-6 font-bold uppercase">ID: 99281734</p>
+            <div className={`${isDarkMode ? 'bg-gray-800' : 'bg-white/10'} rounded-3xl p-6 text-left space-y-4 shadow-inner border border-white/5`}>
+              <div className="flex justify-between text-sm">
+                <span className="font-bold opacity-70">Total Games</span>
+                <span className="font-black">142</span>
               </div>
-              <div className="flex justify-between text-[11px] uppercase font-bold tracking-wider">
-                <span className="opacity-50">Total Revenue</span>
-                <span className="text-emerald-400">1,405 ETB</span>
+              <div className="flex justify-between text-sm">
+                <span className="font-bold opacity-70">Total Won</span>
+                <span className="font-black text-orange-200">1,405 ETB</span>
               </div>
             </div>
           </div>
@@ -118,8 +124,10 @@ const App: React.FC = () => {
     }
   };
 
+  const bgColor = isDarkMode ? 'bg-[#0f172a]' : 'bg-[#a28cd1]';
+
   return (
-    <div className="flex flex-col h-screen max-w-md mx-auto bg-[#0f172a] overflow-hidden relative shadow-[0_0_100px_rgba(0,0,0,0.5)]">
+    <div className={`flex flex-col h-screen max-w-md mx-auto ${bgColor} overflow-hidden shadow-2xl relative transition-colors duration-500`}>
       {(currentView !== View.ADMIN && currentView !== View.ACTIVE_GAME) && (
         <Header 
           balance={walletBalance} 
@@ -128,7 +136,7 @@ const App: React.FC = () => {
           stake={activeSessions.reduce((acc, s) => acc + s.stake, 0)} 
           onReturnToGame={returnToGame}
           isDarkMode={isDarkMode}
-          toggleTheme={() => {}}
+          toggleTheme={() => setIsDarkMode(!isDarkMode)}
         />
       )}
       
