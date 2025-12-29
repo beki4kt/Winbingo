@@ -1,7 +1,11 @@
-
 import React from 'react';
 
-const History: React.FC = () => {
+// Added HistoryProps to fix TypeScript error in App.tsx
+interface HistoryProps {
+  isDarkMode: boolean;
+}
+
+const History: React.FC<HistoryProps> = ({ isDarkMode }) => {
   const games = [
     { id: 'B-7180', date: 'Today, 2:45 PM', stake: 10, won: 80, status: 'WIN' },
     { id: 'B-7175', date: 'Today, 1:20 PM', stake: 50, won: 0, status: 'LOSS' },

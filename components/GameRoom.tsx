@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { generateFairBoard, checkBingoWin } from '../utils';
 
@@ -8,38 +9,45 @@ interface GameRoomProps {
   balance: number;
   setBalance: (bal: number) => void;
   roomId: string;
+  isDarkMode: boolean;
 }
 
-const GameRoom: React.FC<GameRoomProps> = ({ onLeave, boardNumber, stake, balance, setBalance, roomId }) => {
-  const [countdown, setCountdown] = useState(30); 
-  const [isGameRunning, setIsGameRunning] = useState(false);
+const GameRoom: React.FC<GameRoomProps> = ({ onLeave, boardNumber, stake, balance, setBalance, roomId, isDarkMode }) => {
+  const [gameState, setGameState] = useState<'waiting' | 'starting' | 'running' | 'ended'>('waiting');
+  const [countdown, setCountdown] = useState(5); 
   const [currentCall, setCurrentCall] = useState<number | null>(null);
   const [calledNumbers, setCalledNumbers] = useState<number[]>([]);
   const [markedNumbers, setMarkedNumbers] = useState<number[]>(['*' as any]);
-  const [gameEnded, setGameEnded] = useState(false);
   const [winInfo, setWinInfo] = useState<{type: string, index: number} | null>(null);
 
   const HOUSE_CUT = 0.20;
-  const ESTIMATED_PLAYERS = 25; 
-  const DERASH = (stake * ESTIMATED_PLAYERS) * (1 - HOUSE_CUT);
+  const PLAYER_COUNT = useMemo(() => Math.floor(Math.random() * 15) + 30, []); 
+  const DERASH = (stake * PLAYER_COUNT) * (1 - HOUSE_CUT);
 
   const cardMatrix = useMemo(() => generateFairBoard(boardNumber), [boardNumber]);
 
   useEffect(() => {
-    if (countdown > 0 && !isGameRunning) {
-      const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+    if (gameState === 'waiting') {
+      const timer = setTimeout(() => setGameState('starting'), 2000);
       return () => clearTimeout(timer);
-    } else if (countdown === 0 && !isGameRunning) {
-      setIsGameRunning(true);
     }
-  }, [countdown, isGameRunning]);
+  }, [gameState]);
 
   useEffect(() => {
-    if (isGameRunning && !gameEnded) {
+    if (gameState === 'starting' && countdown > 0) {
+      const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+      return () => clearTimeout(timer);
+    } else if (gameState === 'starting' && countdown === 0) {
+      setGameState('running');
+    }
+  }, [gameState, countdown]);
+
+  useEffect(() => {
+    if (gameState === 'running') {
       const interval = setInterval(() => {
         if (calledNumbers.length >= 75) {
           clearInterval(interval);
-          setGameEnded(true);
+          setGameState('ended');
           return;
         }
         let nextNum: number;
@@ -49,241 +57,225 @@ const GameRoom: React.FC<GameRoomProps> = ({ onLeave, boardNumber, stake, balanc
 
         setCurrentCall(nextNum);
         setCalledNumbers(prev => [...prev, nextNum]);
-      }, 5000); 
+      }, 3500); 
       return () => clearInterval(interval);
     }
-  }, [isGameRunning, calledNumbers, gameEnded]);
+  }, [gameState, calledNumbers]);
 
   const handleMark = (num: number | string) => {
-    if (!isGameRunning || gameEnded || num === '*') return;
-    if (calledNumbers.includes(num as number)) {
-      setMarkedNumbers(prev => prev.includes(num as any) ? prev : [...prev, num as any]);
-    }
+    if (gameState !== 'running' || num === '*') return;
+    setMarkedNumbers(prev => 
+      prev.includes(num as any) 
+        ? prev.filter(n => n !== num) 
+        : [...prev, num as any]
+    );
   };
 
   const handleBingoClick = () => {
     const win = checkBingoWin(cardMatrix, markedNumbers);
     if (win) {
-      setBalance(balance + DERASH);
-      setWinInfo(win);
-      setGameEnded(true);
+      const winPattern = getWinPatternCells(win, cardMatrix);
+      const allValid = winPattern.every(cell => cell === '*' || calledNumbers.includes(cell as number));
+      
+      if (allValid) {
+        setBalance(balance + DERASH);
+        setWinInfo(win);
+        setGameState('ended');
+      } else {
+        alert("Wait! Some marked numbers haven't been called yet.");
+      }
     } else {
-      alert("No valid Bingo pattern detected!");
+      alert("No Bingo pattern detected! Keep marking.");
     }
   };
 
-  const leftBoardCols = [
-    { letter: 'B', accent: 'border-amber-500', range: [1, 15] },
-    { letter: 'I', accent: 'border-blue-500', range: [16, 30] },
-    { letter: 'N', accent: 'border-purple-500', range: [31, 45] },
-    { letter: 'G', accent: 'border-red-500', range: [46, 60] },
-    { letter: 'O', accent: 'border-green-500', range: [61, 75] },
-  ];
-
-  const isWinPatternCell = (rIdx: number, cIdx: number) => {
-    if (!winInfo) return false;
-    if (winInfo.type === 'ROW' && winInfo.index === rIdx) return true;
-    if (winInfo.type === 'COL' && winInfo.index === cIdx) return true;
-    if (winInfo.type === 'DIAG' && winInfo.index === 1 && rIdx === cIdx) return true;
-    if (winInfo.type === 'DIAG' && winInfo.index === 2 && rIdx === 4 - cIdx) return true;
-    if (winInfo.type === 'CORNER' && (
-      (rIdx === 0 && cIdx === 0) || (rIdx === 0 && cIdx === 4) || 
-      (rIdx === 4 && cIdx === 0) || (rIdx === 4 && cIdx === 4)
-    )) return true;
-    return false;
+  const getWinPatternCells = (win: {type: string, index: number}, matrix: (number|string)[][]) => {
+    const cells: (number|string)[] = [];
+    if (win.type === 'ROW') cells.push(...matrix[win.index]);
+    if (win.type === 'COL') {
+      for (let r = 0; r < 5; r++) cells.push(matrix[r][win.index]);
+    }
+    if (win.type === 'DIAG') {
+      for (let i = 0; i < 5; i++) {
+        cells.push(win.index === 1 ? matrix[i][i] : matrix[i][4-i]);
+      }
+    }
+    if (win.type === 'CORNER') {
+      cells.push(matrix[0][0], matrix[0][4], matrix[4][0], matrix[4][4]);
+    }
+    return cells;
   };
 
+  const letters = [
+    { label: 'B', color: 'bg-yellow-500' },
+    { label: 'I', color: 'bg-green-500' },
+    { label: 'N', color: 'bg-blue-500' },
+    { label: 'G', color: 'bg-red-500' },
+    { label: 'O', color: 'bg-purple-700' },
+  ];
+
+  const boardCols = [
+    { range: [1, 15] },
+    { range: [16, 30] },
+    { range: [31, 45] },
+    { range: [46, 60] },
+    { range: [61, 75] },
+  ];
+
+  const StatPill = ({ label, value, sub, highlight }: { label: string, value: string | number, sub?: string, highlight?: boolean }) => (
+    <div className={`${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white/90 border-purple-300'} rounded-md p-1 flex flex-col items-center justify-center border min-w-0 shadow-sm ${highlight ? 'ring-2 ring-yellow-400' : ''}`}>
+      <span className={`text-[6px] ${isDarkMode ? 'text-indigo-400' : 'text-purple-800'} font-bold uppercase leading-none mb-0.5 whitespace-nowrap`}>{label}</span>
+      <span className={`text-[8px] font-black ${isDarkMode ? 'text-white' : 'text-purple-900'} leading-none truncate`}>{value}</span>
+      {sub && <span className={`text-[6px] ${isDarkMode ? 'text-gray-500' : 'text-purple-400'} font-bold leading-none mt-0.5`}>{sub}</span>}
+    </div>
+  );
+
   return (
-    <div className="flex flex-col h-full bg-[#1a1b23] overflow-hidden animate-fadeIn">
-      {/* Header Taskbar */}
-      <div className="grid grid-cols-6 gap-0.5 px-2 py-2 text-[7px] font-black text-white/40 border-b border-white/5 bg-black/10">
-        <div className="bg-white/5 p-1.5 rounded-lg text-center border border-white/5">
-          <span className="text-orange-500 uppercase block text-[5px] mb-0.5 tracking-widest">ARENA</span>
-          <span className="truncate text-white font-black">{roomId}</span>
-        </div>
-        <div className="bg-white/5 p-1.5 rounded-lg text-center border border-white/5">
-          <span className="text-orange-500 uppercase block text-[5px] mb-0.5 tracking-widest">POT</span>
-          <span className="text-white font-black">{DERASH.toFixed(0)}</span>
-        </div>
-        <div className="bg-white/5 p-1.5 rounded-lg text-center border border-white/5">
-          <span className="text-orange-500 uppercase block text-[5px] mb-0.5 tracking-widest">USERS</span>
-          <span className="text-white font-black">{ESTIMATED_PLAYERS}</span>
-        </div>
-        <div className="bg-white/5 p-1.5 rounded-lg text-center border border-white/5">
-          <span className="text-orange-500 uppercase block text-[5px] mb-0.5 tracking-widest">CARD</span>
-          <span className="text-white font-black">#{boardNumber}</span>
-        </div>
-        <div className="bg-white/5 p-1.5 rounded-lg text-center border border-white/5">
-          <span className="text-orange-500 uppercase block text-[5px] mb-0.5 tracking-widest">BALLS</span>
-          <span className="text-white font-black">{calledNumbers.length}</span>
-        </div>
-        <div className="bg-white/5 p-1.5 rounded-lg text-center border border-white/5 flex flex-col items-center justify-center">
-          <span className="text-green-500 uppercase block text-[5px] mb-0.5 tracking-widest">SSL</span>
-          <i className="fas fa-shield-check text-green-500 text-[7px]"></i>
-        </div>
+    <div className={`flex flex-col h-full ${isDarkMode ? 'bg-[#0f172a]' : 'bg-[#a28cd1]'} overflow-hidden animate-fadeIn select-none transition-colors duration-500`}>
+      {/* Top Status Bar */}
+      <div className="grid grid-cols-7 gap-1 px-2 py-2 shrink-0">
+        <StatPill label="Arena" value={roomId.replace('ARENA-','')} sub="SYNC" />
+        <StatPill label="Derash" value={DERASH.toFixed(0)} />
+        <StatPill label="Bonus" value="Off" />
+        <StatPill label="Players" value={PLAYER_COUNT} highlight={true} />
+        <StatPill label="Stake" value={stake} />
+        <StatPill label="Call" value={calledNumbers.length} />
+        <StatPill label="Sound" value="Off" />
       </div>
 
-      <div className="flex flex-1 overflow-hidden px-2 pt-2 gap-2">
-        {/* Caller Board - Wider and Optimized for No-Scroll */}
-        <div className="w-[160px] flex flex-col bg-black/30 rounded-xl overflow-hidden border border-white/5 p-1 shrink-0">
-          <div className="grid grid-cols-5 gap-0.5 mb-1 bg-white/5 rounded-t-lg">
-            {leftBoardCols.map(col => (
-              <div key={col.letter} className={`text-white text-[8px] font-black text-center py-1.5 rounded-sm border-b-2 ${col.accent}`}>
-                {col.letter}
+      <div className="flex flex-1 overflow-hidden px-2 gap-2 pb-1 pt-1">
+        {/* Left column: 1-75 Caller Grid */}
+        <div className={`w-[150px] flex flex-col ${isDarkMode ? 'bg-black/40' : 'bg-white/20'} rounded-xl overflow-hidden p-1 shrink-0 border border-white/10 shadow-inner`}>
+          <div className="grid grid-cols-5 gap-0.5 mb-1">
+            {letters.map((l, i) => (
+              <div key={i} className={`${l.color} text-white text-[10px] font-black text-center py-1.5 rounded-t-md`}>
+                {l.label}
               </div>
             ))}
           </div>
-          <div className="flex-1 min-h-0">
-             <div className="grid grid-cols-5 gap-0.5 h-full">
-               {Array.from({length: 15}).map((_, rowIndex) => (
-                 leftBoardCols.map((col, colIdx) => {
-                   const num = col.range[0] + rowIndex;
-                   const isCalled = calledNumbers.includes(num);
-                   return (
-                     <div key={`${colIdx}-${rowIndex}`} className={`
-                       text-center text-[9px] font-black flex items-center justify-center rounded transition-all h-full min-h-[16px]
-                       ${isCalled ? 'bg-orange-500 text-white shadow-sm scale-95' : 'text-white/10'}
-                     `}>
-                       {num}
-                     </div>
-                   );
-                 })
-               ))}
-             </div>
+          <div className="flex-1 grid grid-cols-5 gap-0.5">
+            {Array.from({ length: 15 }).map((_, rowIdx) => (
+              boardCols.map((col, colIdx) => {
+                const num = col.range[0] + rowIdx;
+                const isCalled = calledNumbers.includes(num);
+                return (
+                  <div 
+                    key={`${colIdx}-${rowIdx}`} 
+                    className={`flex items-center justify-center rounded-sm text-[9px] font-black h-full transition-all duration-300
+                      ${isCalled 
+                        ? (isDarkMode ? 'bg-indigo-600 text-white' : 'bg-white text-[#5e35b1]') 
+                        : (isDarkMode ? 'bg-white/5 text-white/10' : 'bg-white/10 text-white/40')}`}
+                  >
+                    {num}
+                  </div>
+                );
+              })
+            ))}
           </div>
         </div>
 
-        {/* Main Interaction Area */}
-        <div className="flex-1 flex flex-col gap-2 overflow-hidden">
-          {!isGameRunning ? (
-            <div className="bg-white/5 rounded-2xl p-4 flex flex-col items-center justify-center text-center h-[100px] border border-white/5 shrink-0">
-              <div className="text-3xl font-black text-orange-500 mb-0.5 leading-none">{countdown}</div>
-              <p className="text-[7px] font-black text-white/30 uppercase tracking-widest">Awaiting Players</p>
-              <div className="w-full h-1 bg-white/5 rounded-full mt-3 overflow-hidden max-w-[80px]">
-                <div 
-                  className="h-full bg-orange-500 transition-all duration-1000" 
-                  style={{ width: `${(countdown/30)*100}%` }}
-                ></div>
+        {/* Right column: Info & Player Card */}
+        <div className="flex-1 flex flex-col gap-1.5 overflow-hidden">
+          <div className="flex flex-col gap-1 shrink-0">
+            <div className={`${isDarkMode ? 'bg-gray-800/80' : 'bg-white/30'} rounded-lg flex justify-between items-center px-3 py-1.5 border border-white/10 shadow-sm`}>
+              <span className={`text-[10px] font-black ${isDarkMode ? 'text-indigo-400' : 'text-purple-900'} uppercase`}>Status</span>
+              <span className={`text-[10px] font-black ${isDarkMode ? 'text-white' : 'text-purple-900'} uppercase`}>
+                {gameState === 'waiting' ? 'Syncing...' : 
+                 gameState === 'running' ? 'Running' : 
+                 gameState === 'starting' ? countdown : 'Ended'}
+              </span>
+            </div>
+            
+            <div className={`${isDarkMode ? 'bg-gray-900' : 'bg-[#604294]'} rounded-lg p-2 flex justify-between items-center h-14 border border-white/5 shadow-inner`}>
+              <span className="text-[10px] font-black text-white uppercase">Call</span>
+              <div className="w-10 h-10 bg-[#f48120] rounded-full flex items-center justify-center text-white text-xl font-black shadow-lg border-2 border-white/20">
+                {currentCall || '-'}
               </div>
             </div>
-          ) : (
-            <div className="bg-white/10 rounded-2xl p-2.5 flex flex-col items-center relative border border-white/10 shadow-lg shrink-0">
-              <span className="text-orange-500/50 text-[6px] font-black absolute top-1 left-3 uppercase tracking-widest">Call</span>
-              <div className="w-11 h-11 bg-zinc-900 rounded-full flex items-center justify-center text-white font-black text-xl shadow-xl border border-orange-500/30 mt-0.5">
-                {currentCall || '--'}
-              </div>
-              <div className="mt-1.5 flex gap-1">
-                 {calledNumbers.slice(-3).reverse().map((n, i) => (
-                   <div key={i} className={`w-4 h-4 rounded-sm bg-white/5 flex items-center justify-center text-[7px] text-white/20 font-black border border-white/5 ${i === 0 ? 'opacity-0' : 'opacity-100'}`}>
-                     {n}
-                   </div>
-                 ))}
-              </div>
+          </div>
+
+          {/* Player Bingo Card */}
+          <div className={`${isDarkMode ? 'bg-black/40' : 'bg-white/20'} rounded-xl p-1.5 flex-1 flex flex-col items-center justify-center border border-white/10 shadow-lg relative`}>
+            <div className="grid grid-cols-5 gap-1 mb-1 w-full max-w-[190px]">
+              {letters.map((l, i) => (
+                <div key={i} className={`${l.color} text-white text-[11px] font-black text-center py-1 rounded-md`}>
+                  {l.label}
+                </div>
+              ))}
             </div>
-          )}
-
-          {/* Player Card - More Compact */}
-          <div className="bg-black/20 rounded-2xl p-3 shadow-2xl border border-white/5 flex flex-col items-center justify-center flex-1 min-h-0 overflow-hidden">
-             <div className="grid grid-cols-5 gap-1 mb-1.5 w-full max-w-[180px]">
-               {['B','I','N','G','O'].map(l => (
-                 <div key={l} className="text-white/20 text-[8px] font-black text-center">{l}</div>
-               ))}
-             </div>
-             <div className="grid grid-cols-5 gap-1 w-full max-w-[180px] aspect-square">
-                {cardMatrix.map((row, rIdx) => (
-                  row.map((val, cIdx) => {
-                    const isMarked = markedNumbers.includes(val as any);
-                    const isWinningCell = isWinPatternCell(rIdx, cIdx);
-
-                    return (
-                      <button
-                        key={`${cIdx}-${rIdx}`}
-                        onClick={() => handleMark(val)}
-                        disabled={val === '*' || gameEnded}
-                        className={`
-                          aspect-square flex items-center justify-center rounded-lg font-black text-sm transition-all
-                          ${val === '*' ? 'bg-orange-600 text-white' : 
-                            isWinningCell ? 'bg-yellow-400 text-black animate-pulse shadow-lg z-10' :
-                            isMarked ? 'bg-orange-500 text-white shadow-md' : 
-                            'bg-zinc-800 text-white/70 border border-white/5 hover:bg-zinc-700'}
-                          active:scale-90
-                        `}
-                      >
-                        {val === '*' ? '★' : val}
-                      </button>
-                    );
-                  })
-                ))}
-             </div>
+            
+            <div className="grid grid-cols-5 gap-1 w-full aspect-square max-w-[190px]">
+              {cardMatrix.map((row, rIdx) => (
+                row.map((val, cIdx) => {
+                  const isMarked = markedNumbers.includes(val as any);
+                  const isTrulyCalled = val === '*' || calledNumbers.includes(val as number);
+                  
+                  return (
+                    <button
+                      key={`${cIdx}-${rIdx}`}
+                      onClick={() => handleMark(val)}
+                      disabled={val === '*' || gameState === 'ended'}
+                      className={`
+                        aspect-square flex items-center justify-center rounded-sm font-black text-base transition-all border border-black/5
+                        ${val === '*' ? 'bg-green-700 text-white shadow-inner' : 
+                          isMarked ? (isTrulyCalled ? 'bg-green-600 text-white ring-2 ring-white/50' : 'bg-gray-700 text-white/70') : 
+                          isDarkMode ? 'bg-gray-800 text-white' : 'bg-white/90 text-black active:scale-95 shadow-sm'}
+                      `}
+                    >
+                      {val === '*' ? '★' : val}
+                    </button>
+                  );
+                })
+              ))}
+            </div>
+            <p className="text-[6px] font-black text-white/50 mt-1 uppercase">Board# {boardNumber}</p>
           </div>
         </div>
       </div>
 
-      <div className="p-3 space-y-2 shrink-0 bg-black/5 border-t border-white/5">
+      {/* Action Buttons */}
+      <div className={`px-3 py-3 space-y-2 shrink-0 ${isDarkMode ? 'bg-black/60' : 'bg-black/10'} backdrop-blur-md`}>
         <button 
           onClick={handleBingoClick}
-          disabled={gameEnded || !isGameRunning}
+          disabled={gameState !== 'running'}
           className={`
-            w-full py-3.5 rounded-xl font-black text-lg shadow-xl transition-all transform active:scale-95 uppercase tracking-tighter
-            ${gameEnded || !isGameRunning ? 'bg-zinc-800 text-white/5 cursor-not-allowed' : 'bg-orange-500 text-white hover:bg-orange-600 ring-2 ring-orange-500/20'}
+            w-full py-4 rounded-full font-black text-2xl shadow-xl transition-all active:scale-95 uppercase
+            ${gameState !== 'running' 
+              ? 'bg-orange-500/50 text-white/50 cursor-not-allowed' 
+              : 'bg-[#f48120] text-white ring-2 ring-white/10'}
           `}
         >
-          BINGO
+          BINGO!
         </button>
-        <button onClick={onLeave} className="w-full py-1 text-white/10 font-black text-[6px] uppercase tracking-widest hover:text-white/30 transition-colors">
-          {gameEnded ? 'Close Arena' : 'Terminate Session'}
-        </button>
+        
+        <div className="flex gap-2">
+          <button onClick={() => window.location.reload()} className="flex-1 bg-[#1eb2d9] text-white py-2.5 rounded-full font-black text-[11px] uppercase shadow-lg">Refresh</button>
+          <button onClick={onLeave} className="flex-1 bg-[#f04e4e] text-white py-2.5 rounded-full font-black text-[11px] uppercase shadow-lg">Leave</button>
+        </div>
       </div>
 
-      {gameEnded && (
-        <div className="fixed inset-0 bg-black/98 backdrop-blur-md z-[100] flex items-center justify-center p-4">
-          <div className="bg-[#1f2029] rounded-[2rem] p-5 text-center shadow-2xl max-w-[280px] w-full animate-fadeIn border border-white/10">
+      {/* Result Modal */}
+      {gameState === 'ended' && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[100] flex items-center justify-center p-6 animate-fadeIn">
+          <div className={`${isDarkMode ? 'bg-gray-900 border-indigo-500/50' : 'bg-[#a28cd1] border-white/20'} rounded-[2.5rem] p-8 text-center shadow-2xl max-w-[300px] w-full border text-white`}>
             {winInfo ? (
               <>
-                <div className="w-12 h-12 bg-orange-500 rounded-full mx-auto mb-2 flex items-center justify-center shadow-2xl">
-                  <i className="fas fa-trophy text-white text-xl"></i>
+                <div className="w-16 h-16 bg-green-500 rounded-full mx-auto mb-4 flex items-center justify-center shadow-lg border-2 border-white animate-bounce">
+                  <i className="fas fa-crown text-white text-2xl"></i>
                 </div>
-                <h2 className="text-xl font-black text-white mb-0.5 tracking-tight uppercase">JACKPOT!</h2>
-                <p className="text-[9px] font-black text-orange-500 uppercase tracking-widest mb-3">Awarded {DERASH.toFixed(0)} ETB</p>
-                
-                <div className="bg-black/50 p-3 rounded-2xl border border-white/5 mb-4">
-                   <p className="text-[6px] font-black text-white/20 uppercase mb-2 tracking-widest">Verification Result</p>
-                   <div className="grid grid-cols-5 gap-0.5 mx-auto max-w-[100px]">
-                      {cardMatrix.map((row, rIdx) => row.map((val, cIdx) => {
-                         const isPattern = isWinPatternCell(rIdx, cIdx);
-                         return (
-                           <div key={`${rIdx}-${cIdx}`} className={`aspect-square rounded-[1px] flex items-center justify-center text-[6px] font-black ${
-                             isPattern ? 'bg-yellow-400 text-black' : 'bg-white/5 text-white/10'
-                           }`}>
-                             {val === '*' ? '★' : val}
-                           </div>
-                         );
-                      }))}
-                   </div>
-                   <p className="text-[7px] text-yellow-400 font-black uppercase mt-2 tracking-widest">
-                     Pattern: {winInfo.type}
-                   </p>
-                </div>
+                <h2 className="text-2xl font-black mb-1 uppercase">WINNER!</h2>
+                <p className="text-4xl font-black text-yellow-400 mb-6">{DERASH.toFixed(0)} ETB</p>
               </>
             ) : (
               <>
-                <div className="w-12 h-12 bg-zinc-800 rounded-full mx-auto mb-3 flex items-center justify-center">
-                  <i className="fas fa-times text-white/20 text-xl"></i>
+                <div className="w-16 h-16 bg-white/10 rounded-full mx-auto mb-6 flex items-center justify-center">
+                  <i className="fas fa-flag-checkered text-white/40 text-2xl"></i>
                 </div>
-                <h2 className="text-xl font-black text-white mb-4 uppercase tracking-tight">Arena Over</h2>
-                <div className="bg-black/50 p-3 rounded-2xl border border-white/5 mb-4">
-                   <div className="grid grid-cols-5 gap-0.5 mx-auto max-w-[100px]">
-                      {cardMatrix.map((row, rIdx) => row.map((val, cIdx) => (
-                        <div key={`${rIdx}-${cIdx}`} className={`aspect-square rounded-[1px] flex items-center justify-center text-[6px] font-black ${markedNumbers.includes(val as any) ? 'bg-white/10 text-white/30' : 'bg-white/5 text-white/10'}`}>
-                           {val === '*' ? '★' : val}
-                        </div>
-                      )))}
-                   </div>
-                </div>
+                <h2 className="text-xl font-black mb-4 uppercase">ARENA ENDED</h2>
               </>
             )}
-            <button onClick={onLeave} className="w-full py-3.5 bg-orange-500 text-white rounded-xl font-black shadow-lg uppercase transition-all active:scale-95 tracking-widest text-[8px]">
-              Leave Room
+            <button onClick={onLeave} className={`w-full py-4 ${isDarkMode ? 'bg-indigo-600 text-white' : 'bg-white text-[#a28cd1]'} rounded-full font-black shadow-xl uppercase transition-all text-[11px] tracking-widest`}>
+              Return to Lobby
             </button>
           </div>
         </div>

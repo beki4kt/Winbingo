@@ -1,3 +1,4 @@
+
 import React from 'react';
 
 interface HeaderProps {
@@ -5,37 +6,54 @@ interface HeaderProps {
   bonus: number;
   activeGames: number;
   stake: number;
+  onReturnToGame: () => void;
+  isDarkMode: boolean;
+  toggleTheme: () => void;
 }
 
-const Header: React.FC<HeaderProps> = ({ balance, bonus, activeGames, stake }) => {
+const Header: React.FC<HeaderProps> = ({ balance, bonus, activeGames, stake, onReturnToGame, isDarkMode, toggleTheme }) => {
+  const MetricPill = ({ label, value, color = "text-black", onClick }: { label: string, value: string | number, color?: string, onClick?: () => void }) => (
+    <button 
+      onClick={onClick}
+      className={`${isDarkMode ? 'bg-gray-800' : 'bg-white'} rounded-full py-2 px-1 flex flex-col items-center justify-center shadow-sm transition-all active:scale-95 flex-1 min-w-0 ${onClick ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
+    >
+      <span className={`text-[8px] ${isDarkMode ? 'text-gray-400' : 'text-gray-400'} font-bold uppercase tracking-tight leading-none mb-1 whitespace-nowrap`}>{label}</span>
+      <span className={`text-[11px] font-black ${isDarkMode ? 'text-white' : 'text-black'} leading-none truncate w-full text-center px-1`}>{value}</span>
+    </button>
+  );
+
   return (
-    <div className="pt-2 pb-1 px-3 bg-[#121212] border-b border-white/5">
-      <div className="flex justify-between items-center mb-1.5 px-1">
-        <h1 className="text-white font-black text-lg leading-tight tracking-tighter">WIN <span className="text-orange-500">BINGO</span></h1>
-        <div className="flex gap-2">
-          <div className="flex flex-col items-end">
-            <span className="text-[6px] text-white/40 font-bold uppercase">Balance</span>
-            <span className="text-[10px] font-black text-white leading-none">{balance.toFixed(0)} ETB</span>
-          </div>
-          <button className="text-white opacity-20 hover:opacity-100 self-center ml-2">
-            <i className="fas fa-cog text-xs"></i>
+    <div className="bg-transparent px-4 pt-4 pb-2 shrink-0">
+      <div className="flex justify-between items-center mb-6">
+        <button className="text-white text-sm font-bold flex items-center gap-1">
+          <i className="fas fa-chevron-left"></i> Back
+        </button>
+        <div className="text-center">
+          <h1 className="text-white font-black text-lg leading-tight tracking-tight">Addis Bingo</h1>
+          <p className="text-white/60 text-[9px] font-bold uppercase tracking-[0.2em] leading-none">mini app</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={toggleTheme}
+            className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white transition-all active:scale-90"
+          >
+            <i className={`fas ${isDarkMode ? 'fa-sun' : 'fa-moon'}`}></i>
+          </button>
+          <button className="text-white text-lg">
+            <i className="fas fa-ellipsis"></i>
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-1 mb-1">
-        <div className="bg-white/5 border border-white/5 rounded-lg py-1 px-1 flex flex-col items-center justify-center">
-          <span className="text-[6px] text-white/40 font-bold uppercase">Bonus</span>
-          <span className="text-[9px] font-black text-orange-400 leading-none">{bonus}</span>
-        </div>
-        <div className="bg-white/5 border border-white/5 rounded-lg py-1 px-1 flex flex-col items-center justify-center">
-          <span className="text-[6px] text-white/40 font-bold uppercase">Active</span>
-          <span className="text-[9px] font-black text-white leading-none">{activeGames}</span>
-        </div>
-        <div className="bg-white/5 border border-white/5 rounded-lg py-1 px-1 flex flex-col items-center justify-center">
-          <span className="text-[6px] text-white/40 font-bold uppercase">Stake</span>
-          <span className="text-[9px] font-black text-white leading-none">{stake}</span>
-        </div>
+      <div className="flex gap-2 justify-between">
+        <MetricPill label="Wallet" value={balance.toFixed(2)} />
+        <MetricPill label="Bonus" value={bonus} />
+        <MetricPill 
+          label="Active Game" 
+          value={activeGames} 
+          onClick={activeGames > 0 ? onReturnToGame : undefined}
+        />
+        <MetricPill label="Stake" value={stake} />
       </div>
     </div>
   );

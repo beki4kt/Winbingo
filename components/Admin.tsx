@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 
 interface WithdrawalRequest {
@@ -9,7 +8,12 @@ interface WithdrawalRequest {
   status: 'pending' | 'approved' | 'rejected';
 }
 
-const Admin: React.FC = () => {
+// Added AdminProps to fix TypeScript error in App.tsx
+interface AdminProps {
+  isDarkMode: boolean;
+}
+
+const Admin: React.FC<AdminProps> = ({ isDarkMode }) => {
   const [commission, setCommission] = useState(20);
   const [withdrawals, setWithdrawals] = useState<WithdrawalRequest[]>([
     { id: 'W-101', user: 'Abebe_251', amount: 500, method: 'Telebirr', status: 'pending' },

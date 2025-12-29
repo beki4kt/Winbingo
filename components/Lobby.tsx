@@ -1,4 +1,5 @@
-import React, { useState, useMemo, useEffect } from 'react';
+
+import React, { useState, useEffect, useMemo } from 'react';
 import { generateFairBoard } from '../utils';
 
 interface LobbyProps {
@@ -6,140 +7,157 @@ interface LobbyProps {
   selectedNumber: number | null;
   setSelectedNumber: (num: number | null) => void;
   activeRoomIds: string[];
+  isDarkMode: boolean;
 }
 
-const Lobby: React.FC<LobbyProps> = ({ onStartGame, selectedNumber, setSelectedNumber, activeRoomIds }) => {
-  const [activeGames, setActiveGames] = useState([
-    { id: 'R1', players: 24, timer: 30, stake: 10 },
-    { id: 'R2', players: 18, timer: 15, stake: 10 },
-    { id: 'R3', players: 12, timer: 22, stake: 10 },
-    { id: 'R4', players: 8, timer: 10, stake: 10 },
-  ]);
+const Lobby: React.FC<LobbyProps> = ({ onStartGame, selectedNumber, setSelectedNumber, activeRoomIds, isDarkMode }) => {
+  const [loading, setLoading] = useState(false);
+  const [stake, setStake] = useState<number>(10);
+  const [otherPicks, setOtherPicks] = useState<number[]>([]);
+  const numbers = Array.from({ length: 100 }, (_, i) => i + 1);
 
-  const [otherPlayersNumbers, setOtherPlayersNumbers] = useState<number[]>([]);
+  const stakes = [10, 25, 50, 100];
 
-  useEffect(() => {
-    const updateOthers = () => {
-      const set = new Set<number>();
-      for (let i = 0; i < 22; i++) {
-        set.add(Math.floor(Math.random() * 100) + 1);
-      }
-      setOtherPlayersNumbers(Array.from(set));
-    };
-    updateOthers();
-    const interval = setInterval(updateOthers, 7000);
-    return () => clearInterval(interval);
-  }, []);
+  const previewBoard = useMemo(() => {
+    return selectedNumber ? generateFairBoard(selectedNumber) : null;
+  }, [selectedNumber]);
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setActiveGames(prev => prev.map(g => ({
-        ...g,
-        timer: g.timer <= 0 ? 30 : g.timer - 1,
-        players: g.timer <= 0 ? Math.floor(Math.random() * 20) + 5 : g.players + (Math.random() > 0.8 ? 1 : 0)
-      })));
-    }, 1000);
+      setOtherPicks(prev => {
+        const next = [...prev];
+        if (next.length > 15) next.shift();
+        let pick;
+        do {
+          pick = Math.floor(Math.random() * 100) + 1;
+        } while (pick === selectedNumber || next.includes(pick));
+        return [...next, pick];
+      });
+    }, 2000);
     return () => clearInterval(interval);
-  }, []);
+  }, [selectedNumber]);
 
-  const numbers = Array.from({ length: 100 }, (_, i) => i + 1);
-  const previewMatrix = useMemo(() => selectedNumber ? generateFairBoard(selectedNumber) : null, [selectedNumber]);
+  const handleStartGameClick = () => {
+    if (selectedNumber === null) return;
+    setLoading(true);
+    setTimeout(() => {
+      const randomRoomId = 'ARENA-' + (Math.floor(Math.random() * 8999) + 1000);
+      onStartGame(selectedNumber, stake, randomRoomId);
+      setLoading(false);
+    }, 1200);
+  };
+
+  const handleRefresh = () => {
+    setSelectedNumber(null);
+    setOtherPicks([]);
+  };
+
+  const containerColor = isDarkMode ? 'bg-[#0f172a]' : 'bg-[#a28cd1]';
+  const gridCardColor = isDarkMode ? 'bg-gray-900/50' : 'bg-white/10';
+  const btnColor = isDarkMode ? 'bg-gray-800 text-gray-400' : 'bg-white/20 text-purple-900/60';
+  const activeBtnColor = isDarkMode ? 'bg-indigo-600 text-white' : 'bg-white text-[#a28cd1]';
 
   return (
-    <div className="px-2 py-1 flex flex-col h-full overflow-hidden animate-fadeIn bg-[#1a1b23]">
-      {/* 1-100 Grid Section - Ultra small buttons */}
-      <div className="grid grid-cols-10 gap-0.5 mb-2 bg-black/30 p-1.5 rounded-xl border border-white/5 shrink-0">
-        {numbers.map((num) => {
-          const isSelected = selectedNumber === num;
-          const isOther = otherPlayersNumbers.includes(num);
-          return (
+    <div className={`flex flex-col min-h-full ${containerColor} animate-fadeIn relative pb-96 transition-colors duration-500`}>
+      
+      {/* Stake Selection */}
+      <div className="px-4 py-2">
+        <div className={`flex justify-between items-center ${isDarkMode ? 'bg-black/40' : 'bg-black/10'} rounded-2xl p-1`}>
+          {stakes.map(s => (
             <button
-              key={num}
-              onClick={() => !isOther && setSelectedNumber(num === selectedNumber ? null : num)}
-              className={`aspect-square rounded-[3px] text-[7px] font-black flex items-center justify-center transition-all
-                ${isSelected ? 'bg-orange-500 text-white scale-105 z-10 shadow-lg ring-1 ring-white/20' : 
-                  isOther ? 'bg-orange-900/30 text-orange-200/40 cursor-not-allowed border border-orange-500/10' : 
-                  'bg-white/5 text-white/30 hover:bg-white/10'}`}
+              key={s}
+              onClick={() => setStake(s)}
+              className={`flex-1 py-2 rounded-xl font-black text-[11px] transition-all
+                ${stake === s 
+                  ? activeBtnColor + ' shadow-md scale-105' 
+                  : 'text-white/40'}`}
             >
-              {num}
+              {s} ETB
             </button>
-          );
-        })}
+          ))}
+        </div>
       </div>
 
-      {/* Split Section: Arenas (Left) | Preview (Right) - side by side and tiny */}
-      <div className="flex flex-1 gap-2 min-h-0 mb-1 overflow-hidden">
-        {/* Active Rooms - Left Column */}
-        <div className="flex-[1.3] flex flex-col bg-black/20 rounded-xl p-2 border border-white/5 overflow-hidden">
-          <div className="flex justify-between items-center mb-1.5 px-1">
-            <span className="text-[7px] font-black text-white/40 uppercase tracking-widest">Arenas</span>
-            <span className="w-1 h-1 bg-green-500 rounded-full animate-pulse"></span>
-          </div>
-          
-          <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 space-y-1">
-            {activeGames.map(game => {
-              const isJoined = activeRoomIds.includes(game.id);
+      {/* 1-100 Grid Area */}
+      <div className="flex-1 px-4 py-2 overflow-visible">
+        <div className={`${gridCardColor} p-4 rounded-[2.5rem] border border-white/10 shadow-xl`}>
+          <div className="grid grid-cols-10 gap-1.5 justify-items-center">
+            {numbers.map((num) => {
+              const isUserSelected = selectedNumber === num;
+              const isOtherSelected = otherPicks.includes(num);
+              
               return (
-                <div 
-                  key={game.id} 
-                  onClick={() => !isJoined && selectedNumber && onStartGame(selectedNumber, game.stake, game.id)}
-                  className={`bg-white/5 rounded-lg p-1.5 flex justify-between items-center border transition-all cursor-pointer active:scale-95
-                    ${isJoined ? 'opacity-30 cursor-not-allowed' : 
-                      selectedNumber ? 'border-white/5 hover:border-orange-500/30 hover:bg-white/10' : 'border-white/5 opacity-60'}`}
+                <button
+                  key={num}
+                  onClick={() => setSelectedNumber(num)}
+                  className={`w-full aspect-square rounded-lg text-[12px] font-black flex items-center justify-center transition-all duration-200
+                    ${isUserSelected 
+                      ? activeBtnColor + ' scale-110 shadow-lg ring-2 ring-white/50' 
+                      : isOtherSelected 
+                      ? 'bg-white/5 text-white/5' 
+                      : btnColor + ' hover:opacity-80'}`}
                 >
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-6 h-6 bg-orange-500/10 rounded flex items-center justify-center border border-orange-500/10 shrink-0">
-                      <span className="text-orange-500 font-black text-[8px]">{game.id}</span>
-                    </div>
-                    <div className="min-w-0">
-                      <div className="text-[8px] font-black text-white leading-none">10 ETB</div>
-                      <div className="text-[6px] text-white/30 font-bold uppercase truncate">{game.players}P</div>
-                    </div>
-                  </div>
-                  <div className="text-right shrink-0">
-                    {isJoined ? (
-                      <span className="text-[6px] font-black text-green-400">OK</span>
-                    ) : (
-                      <div className="text-[9px] font-black text-orange-500 leading-none">:{game.timer < 10 ? `0${game.timer}` : game.timer}</div>
-                    )}
-                  </div>
-                </div>
+                  {num}
+                </button>
               );
             })}
           </div>
         </div>
-
-        {/* Card Preview - Right Column */}
-        <div className="flex-1 flex flex-col bg-zinc-900/40 p-2 rounded-xl border border-white/5 overflow-hidden">
-          <div className="text-[7px] text-white/30 font-black uppercase mb-1.5 flex justify-between w-full px-1">
-            <span>{selectedNumber ? `#${selectedNumber}` : '---'}</span>
-            <span className="text-orange-500">Card</span>
-          </div>
-          
-          <div className="flex-1 flex items-center justify-center">
-            {selectedNumber && previewMatrix ? (
-              <div className="grid grid-cols-5 gap-0.5 w-full">
-                {previewMatrix.map((row, rIdx) => row.map((cell, cIdx) => (
-                  <div key={`${rIdx}-${cIdx}`} className={`aspect-square flex items-center justify-center text-[7px] font-black rounded-[2px] border ${cell === '*' ? 'bg-orange-500 border-white/10 text-white' : 'bg-white/5 border-white/5 text-white/40'}`}>
-                    {cell === '*' ? '★' : cell}
-                  </div>
-                )))}
-              </div>
-            ) : (
-              <div className="text-center opacity-10 px-2">
-                <i className="fas fa-hand-pointer text-base mb-0.5"></i>
-                <p className="text-[6px] font-black uppercase tracking-tighter">Pick No.</p>
-              </div>
-            )}
-          </div>
-        </div>
       </div>
 
-      {/* Bottom Info Bar - Minimal */}
-      <div className="h-5 flex items-center justify-center bg-orange-500/5 rounded-lg border border-orange-500/10 mb-1 shrink-0">
-        <p className="text-orange-500/60 text-[6px] font-black uppercase tracking-[0.2em] animate-pulse">
-          {selectedNumber ? 'SELECT ARENA TO JOIN' : 'SELECT BOARD NUMBER ABOVE'}
-        </p>
+      {/* Floating Preview - Theme Matched */}
+      {selectedNumber && (
+        <div className="fixed bottom-[180px] left-6 z-20 animate-fadeIn pointer-events-none origin-bottom-left">
+          <div className={`${isDarkMode ? 'bg-gray-900 ring-indigo-500/50' : 'bg-white/95 ring-purple-200'} backdrop-blur-md p-2.5 rounded-2xl border-2 border-white/20 shadow-[0_15px_35px_rgba(0,0,0,0.5)] w-32 ring-1`}>
+            <div className="flex justify-between items-center mb-1.5 px-0.5">
+              <p className={`text-[8px] font-black uppercase ${isDarkMode ? 'text-indigo-400' : 'text-purple-900'} tracking-tighter`}>Card #{selectedNumber}</p>
+              <div className="flex gap-[1.5px]">
+                <div className={`w-1.5 h-1.5 rounded-full ${isDarkMode ? 'bg-indigo-400' : 'bg-purple-400'}`}></div>
+                <div className={`w-1.5 h-1.5 rounded-full ${isDarkMode ? 'bg-indigo-600' : 'bg-purple-600'}`}></div>
+              </div>
+            </div>
+            <div className="grid grid-cols-5 gap-1">
+              {previewBoard?.flat().map((val, i) => (
+                <div 
+                  key={i} 
+                  className={`aspect-square rounded-[3px] flex items-center justify-center text-[7px] font-black
+                    ${val === '*' 
+                      ? 'bg-[#f48120] text-white animate-pulse' 
+                      : isDarkMode 
+                        ? 'bg-gray-800 text-gray-300 border border-gray-700' 
+                        : 'bg-purple-50 text-purple-900 border border-purple-100'}`}
+                >
+                  {val === '*' ? '★' : val}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Action Bar */}
+      <div className="fixed bottom-[100px] left-0 right-0 px-6 flex gap-4 justify-center items-center z-30">
+        <button 
+          onClick={handleRefresh}
+          className="flex-1 bg-[#4b91f7] text-white py-4 rounded-2xl font-black text-sm shadow-xl active:scale-95 transition-all uppercase tracking-wide border-b-4 border-blue-600"
+        >
+          Refresh
+        </button>
+        
+        <button 
+          onClick={handleStartGameClick}
+          disabled={selectedNumber === null || loading}
+          className={`flex-1 py-4 rounded-2xl font-black text-sm shadow-xl transition-all active:scale-95 uppercase tracking-wide border-b-4
+            ${selectedNumber === null || loading
+              ? 'bg-[#f07156]/40 text-white/50 cursor-not-allowed border-red-900/10' 
+              : 'bg-[#f07156] text-white ring-2 ring-white/10 border-red-700'}`}
+        >
+          {loading ? (
+            <i className="fas fa-circle-notch animate-spin"></i>
+          ) : (
+            'Start Game'
+          )}
+        </button>
       </div>
     </div>
   );

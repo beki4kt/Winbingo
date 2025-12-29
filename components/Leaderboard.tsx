@@ -1,7 +1,11 @@
-
 import React from 'react';
 
-const Leaderboard: React.FC = () => {
+// Added LeaderboardProps to fix TypeScript error in App.tsx
+interface LeaderboardProps {
+  isDarkMode: boolean;
+}
+
+const Leaderboard: React.FC<LeaderboardProps> = ({ isDarkMode }) => {
   const winners = [
     { id: 1, name: 'King_Addis', amount: 45200, avatar: '👑', rank: 1 },
     { id: 2, name: 'Bingo_Master', amount: 32150, avatar: '🎯', rank: 2 },

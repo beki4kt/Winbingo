@@ -11,20 +11,20 @@ export enum View {
 
 export interface Player {
   id: string;
-  name: -string;
-  selectedNumbers: number[];
+  name: string;
+  selectedNumber: number;
+}
+
+export interface Arena {
+  id: string;
+  stake: number;
+  status: 'waiting' | 'running' | 'finished';
+  players: Player[];
+  startTime: number;
+  pot: number;
 }
 
 export interface BingoSquare {
   number: number | 'FREE';
   isMarked: boolean;
-}
-
-export interface GameState {
-  id: string;
-  status: 'waiting' | 'running' | 'finished';
-  countdown: number;
-  calledNumbers: number[];
-  stake: number;
-  playersCount: number;
 }

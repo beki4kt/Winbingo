@@ -3,13 +3,16 @@ import React from 'react';
 interface WalletProps {
   balance: number;
   setBalance: (bal: number) => void;
+  // Added isDarkMode to resolve TypeScript error in App.tsx
+  isDarkMode: boolean;
 }
 
-const Wallet: React.FC<WalletProps> = ({ balance, setBalance }) => {
+const Wallet: React.FC<WalletProps> = ({ balance, setBalance, isDarkMode }) => {
   const depositAmounts = [10, 50, 100, 500];
 
+  // Updated background to respect dark mode theme
   return (
-    <div className="p-6 text-white pb-32 bg-[#121212] min-h-full">
+    <div className={`p-6 text-white pb-32 ${isDarkMode ? 'bg-[#0f172a]' : 'bg-[#a28cd1]'} min-h-full transition-colors duration-500`}>
       <div className="bg-white/5 backdrop-blur-md p-10 rounded-[3rem] text-center mb-8 border border-white/10">
         <h3 className="text-white/30 text-xs mb-2 font-black uppercase tracking-[0.3em]">Vault Balance</h3>
         <p className="text-6xl font-black mb-1 leading-none tracking-tighter text-white">{balance.toFixed(2)}</p>
