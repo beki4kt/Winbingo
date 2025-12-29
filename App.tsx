@@ -26,19 +26,27 @@ const App: React.FC = () => {
   const [isDarkMode, setIsDarkMode] = useState<boolean>(false);
 
   useEffect(() => {
-    if (isDarkMode) {
-      document.body.style.backgroundColor = '#0f172a';
-    } else {
-      document.body.style.backgroundColor = '#a28cd1';
+    // Notify Telegram if dark mode changes
+    if (window.Telegram && window.Telegram.WebApp) {
+      const color = isDarkMode ? '#0f172a' : '#a28cd1';
+      window.Telegram.WebApp.setHeaderColor(color);
+      window.Telegram.WebApp.setBackgroundColor(color);
     }
   }, [isDarkMode]);
 
   const handleJoinGame = (num: number, stake: number, roomId: string) => {
     if (walletBalance < stake) {
-      alert("Insufficient balance! Please deposit funds.");
+      if (window.Telegram?.WebApp?.showAlert) {
+        window.Telegram.WebApp.showAlert("Insufficient balance! Refill your wallet.");
+      } else {
+        alert("Insufficient balance! Please deposit funds.");
+      }
       return;
     }
     
+    // Telegram Haptic
+    window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('medium');
+
     setWalletBalance(prev => prev - stake);
     const newSession = { roomId, boardNumber: num, stake };
     const newSessions = [...activeSessions, newSession];
@@ -48,6 +56,7 @@ const App: React.FC = () => {
   };
 
   const handleLeaveGame = (roomId: string) => {
+    window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('warning');
     const updated = activeSessions.filter(s => s.roomId !== roomId);
     setActiveSessions(updated);
     if (updated.length === 0) {
@@ -136,7 +145,10 @@ const App: React.FC = () => {
           stake={activeSessions.reduce((acc, s) => acc + s.stake, 0)} 
           onReturnToGame={returnToGame}
           isDarkMode={isDarkMode}
-          toggleTheme={() => setIsDarkMode(!isDarkMode)}
+          toggleTheme={() => {
+            window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light');
+            setIsDarkMode(!isDarkMode);
+          }}
         />
       )}
       
@@ -145,7 +157,14 @@ const App: React.FC = () => {
       </main>
 
       {currentView !== View.ACTIVE_GAME && (
-        <Navigation currentView={currentView} setView={setCurrentView} isDarkMode={isDarkMode} />
+        <Navigation 
+          currentView={currentView} 
+          setView={(v) => {
+            window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light');
+            setCurrentView(v);
+          }} 
+          isDarkMode={isDarkMode} 
+        />
       )}
     </div>
   );

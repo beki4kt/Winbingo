@@ -3,18 +3,20 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Win Bingo</title>
+    <!-- Telegram Web App Script -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- Babel standalone for in-browser transpilation of .tsx files -->
+    <!-- Babel Standalone for TSX support -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <style>
       @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap');
       
       :root {
         font-family: 'Inter', sans-serif;
-        background-color: #a28cd1;
+        --tg-theme-bg-color: #a28cd1;
       }
 
       body {
@@ -23,6 +25,9 @@
         min-height: 100vh;
         color: #000000;
         overflow: hidden;
+        -webkit-touch-callout: none;
+        -webkit-user-select: none;
+        user-select: none;
       }
 
       #root {
@@ -60,8 +65,22 @@
         z-index: 10000;
         transition: opacity 0.5s ease;
       }
+
+      .spinner {
+        width: 40px;
+        height: 40px;
+        border: 4px solid rgba(255, 255, 255, 0.3);
+        border-top-color: white;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
     </style>
-<script type="importmap">
+
+    <script type="importmap">
 {
   "imports": {
     "react": "https://esm.sh/react@19.2.3",
@@ -75,31 +94,54 @@
 </head>
 <body>
     <div id="loading-overlay">
-        <div class="w-12 h-12 border-4 border-white/20 border-t-white rounded-full animate-spin mb-4"></div>
-        <p class="text-white text-[10px] font-black uppercase tracking-[0.3em]">Loading Game...</p>
+        <div class="spinner mb-4"></div>
+        <p class="text-white text-[12px] font-black uppercase tracking-[0.2em]">Addis Bingo Loading...</p>
+        <div id="debug-log" class="mt-4 text-[10px] text-white/40 font-mono text-center px-4 max-w-xs overflow-hidden">Initializing Engine...</div>
     </div>
 
     <div id="root"></div>
 
-    <script type="text/babel" data-type="module" data-presets="react,typescript" src="./index.tsx"></script>
-    
-    <script>
-      // Global hook to hide loader from within the React app
-      window.hideAppLoader = function() {
-        const loader = document.getElementById('loading-overlay');
-        if (loader) {
-          loader.style.opacity = '0';
-          setTimeout(() => loader.style.display = 'none', 500);
-        }
+    <script type="text/babel" data-type="module" data-presets="react,typescript">
+      import React from 'react';
+      import { createRoot } from 'react-dom/client';
+      import App from './App.tsx';
+
+      const log = (msg) => {
+        console.log(msg);
+        const el = document.getElementById('debug-log');
+        if (el) el.innerText = msg;
       };
-      // Fallback if React fails to mount
-      setTimeout(() => {
-        const loader = document.getElementById('loading-overlay');
-        if (loader && loader.style.opacity !== '0') {
-           // Keep it visible for a bit to show we're trying
-           console.log("App taking longer than expected to initialize...");
+
+      try {
+        log("Mounting UI...");
+        const rootElement = document.getElementById('root');
+        if (rootElement) {
+          const root = createRoot(rootElement);
+          root.render(
+            <React.StrictMode>
+              <App />
+            </React.StrictMode>
+          );
+          
+          // Telegram Web App Initialization
+          if (window.Telegram && window.Telegram.WebApp) {
+            window.Telegram.WebApp.ready();
+            window.Telegram.WebApp.expand();
+          }
+
+          log("Ready!");
+          setTimeout(() => {
+            const loader = document.getElementById('loading-overlay');
+            if (loader) {
+              loader.style.opacity = '0';
+              setTimeout(() => loader.style.display = 'none', 500);
+            }
+          }, 800);
         }
-      }, 5000);
+      } catch (err) {
+        log("Error: " + err.message);
+        console.error(err);
+      }
     </script>
 </body>
 </html>

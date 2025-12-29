@@ -28,3 +28,13 @@ export interface BingoSquare {
   number: number | 'FREE';
   isMarked: boolean;
 }
+
+/**
+ * Global augmentation for Telegram WebApp SDK to fix window property errors.
+ * This ensures that window.Telegram is recognized by the TypeScript compiler throughout the project.
+ */
+declare global {
+  interface Window {
+    Telegram?: any;
+  }
+}
