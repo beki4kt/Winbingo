@@ -45,3 +45,49 @@ async def handle_webhook(request: Request):
 @app.get("/")
 def home():
     return {"message": "Server is running. Send a POST request to /webhook"}
+    import os
+import httpx
+from fastapi import FastAPI, Request
+
+app = FastAPI()
+
+TOKEN = os.getenv("BOT_TOKEN")
+# Make sure your WEBAPP_URL is also in Vercel Env Vars!
+WEBAPP_URL = os.getenv("WEBAPP_URL", "https://your-github-game-url.com")
+
+async def send_telegram_request(method, payload):
+    url = f"https://api.telegram.org/bot{TOKEN}/{method}"
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(url, json=payload)
+        return resp.json()
+
+@app.post("/webhook")
+async def handle_webhook(request: Request):
+    data = await request.json()
+    
+    # Check if this is a message
+    if "message" in data:
+        chat_id = data["message"]["chat"]["id"]
+        text = data["message"].get("text", "")
+
+        if text == "/start":
+            # Send the Welcome Message with the Game Button
+            payload = {
+                "chat_id": chat_id,
+                "text": "🎱 Welcome to Addis Bingo!\n\nClick the button below to start playing and win coins!",
+                "reply_markup": {
+                    "inline_keyboard": [[
+                        {
+                            "text": "🎮 Play Bingo Now",
+                            "web_app": {"url": WEBAPP_URL}
+                        }
+                    ]]
+                }
+            }
+            await send_telegram_request("sendMessage", payload)
+            
+    return {"ok": True}
+
+@app.get("/")
+def health_check():
+    return {"status": "Bingo Bot is Online"}
