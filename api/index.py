@@ -1,36 +1,47 @@
-import os, json, logging, traceback
+import os
+import asyncio
 from fastapi import FastAPI, Request
 from telegram import Update, Bot, KeyboardButton, ReplyKeyboardMarkup
 
-# Initialize logging to see errors in Vercel logs
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
+# 1. Initialize FastAPI
 app = FastAPI()
 
+# 2. Get Token from Vercel Environment Variables
+TOKEN = os.getenv("BOT_TOKEN")
+bot = Bot(token=TOKEN)
+
 @app.post("/webhook")
-async def webhook(request: Request):
+async def handle_webhook(request: Request):
     try:
-        data = await request.json()
-        # Log the incoming data so we know Telegram reached us
-        logger.info(f"Incoming Update: {data}")
-        
-        update = Update.de_json(data, Bot(os.getenv("BOT_TOKEN")))
-        
-        if update.message and update.message.text == "/start":
-            # Test if we can send a simple message first
-            await update.message.reply_text("I am alive! Attempting registration menu...")
+        # Get the JSON data from Telegram
+        payload = await request.json()
+        update = Update.de_json(payload, bot)
+
+        # Check if there is a message and if it's /start
+        if update.message and update.message.text:
+            text = update.message.text
+            user_id = update.effective_user.id
             
-            # Show the registration button
-            btn = [[KeyboardButton("📱 Register", request_contact=True)]]
-            await update.message.reply_text(
-                "Click below to register:",
-                reply_markup=ReplyKeyboardMarkup(btn, resize_keyboard=True)
-            )
-            
+            if text == "/start":
+                # SIMPLE RESPONSE TEST
+                await bot.send_message(
+                    chat_id=user_id, 
+                    text="✅ Bot is alive on Vercel!\n\nIf you see this, the connection is working. Now we can re-enable the database."
+                )
+                
+                # REGISTRATION BUTTON TEST
+                kb = [[KeyboardButton("📱 Register Phone", request_contact=True)]]
+                await bot.send_message(
+                    chat_id=user_id,
+                    text="Please share your contact:",
+                    reply_markup=ReplyKeyboardMarkup(kb, resize_keyboard=True, one_time_keyboard=True)
+                )
+
         return {"status": "ok"}
     except Exception as e:
-        # This will print the EXACT error in your Vercel Logs
-        error_msg = traceback.format_exc()
-        logger.error(f"CRASH: {error_msg}")
+        print(f"Error: {e}")
         return {"status": "error", "message": str(e)}
+
+@app.get("/")
+def home():
+    return {"message": "Server is running. Send a POST request to /webhook"}
