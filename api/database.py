@@ -1,46 +1,38 @@
 import os
-from supabase import create_client, Client
+from supabase import create_client
 
-# These should be set in Vercel Environment Variables
-URL = os.environ.get("SUPABASE_URL")
-KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+# These are pulled from your Vercel Environment Variables
+url = os.environ.get("SUPABASE_URL")
+key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+supabase = create_client(url, key)
 
-supabase: Client = create_client(URL, KEY)
-
-def init_db():
-    # In Supabase, you usually create tables via their "SQL Editor" web UI.
-    # Run the SQL provided below in the Supabase Dashboard to set up.
-    pass
-
-def register_user(user_id, name, phone):
+def register_user(user_id, first_name, phone):
     try:
         data = {
             "user_id": user_id,
-            "first_name": name,
+            "first_name": first_name,
             "phone": phone,
-            "balance": 100.0
+            "balance": 100.0  # Starting bonus
         }
         supabase.table("users").insert(data).execute()
         return True
     except Exception as e:
-        print(f"Error registering: {e}")
+        print(f"Error: {e}")
         return False
 
 def get_user(user_id):
-    res = supabase.table("users").select("*").eq("user_id", user_id).execute()
-    return res.data[0] if res.data else None
+    try:
+        res = supabase.table("users").select("*").eq("user_id", user_id).execute()
+        return res.data[0] if res.data else None
+    except:
+        return None
 
 def update_balance(user_id, amount, action):
-    # 1. Get current user
     user = get_user(user_id)
     if user:
         new_balance = user['balance'] + amount
-        # 2. Update balance
         supabase.table("users").update({"balance": new_balance}).eq("user_id", user_id).execute()
-        # 3. Log history
-        supabase.table("history").insert({
-            "user_id": user_id, 
-            "amount": amount, 
-            "action": action
-        }).execute()
+        # Log to history
+        supabase.table("history").insert({"user_id": user_id, "amount": amount, "action": action}).execute()
         return new_balance
+    return 0
