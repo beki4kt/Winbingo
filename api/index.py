@@ -75,3 +75,19 @@ async def handle_webhook(request: Request):
 @app.get("/")
 def health():
     return {"status": "Bingo Bot is Online"}
+# --- COMMAND: /balance ---
+if text == "/balance":
+    user = get_user(user_id)
+    await call_api("sendMessage", {
+        "chat_id": chat_id,
+        "text": f"💰 *Your Wallet*\n\nBalance: {user['balance']} coins\nStatus: Verified ✅",
+        "parse_mode": "Markdown"
+    })
+
+# --- COMMAND: /support ---
+elif text == "/support":
+    await call_api("sendMessage", {
+        "chat_id": chat_id,
+        "text": "📞 *Customer Support*\n\nIssues with coins? Contact us:\n@YourSupportUsername\n\nOr join our community: [Link]",
+        "parse_mode": "Markdown"
+    })    
