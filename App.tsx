@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { View } from './types';
 import Lobby from './components/Lobby';
@@ -152,7 +151,7 @@ const App: React.FC = () => {
   const bgColor = isDarkMode ? 'bg-[#0f172a]' : 'bg-[#a28cd1]';
 
   return (
-    <div className={`flex flex-col h-screen max-w-md mx-auto ${bgColor} overflow-hidden shadow-2xl relative transition-colors duration-500`}>
+    <div className={`flex flex-col h-[100dvh] w-full max-w-md mx-auto ${bgColor} overflow-hidden shadow-2xl relative transition-colors duration-500`}>
       {(currentView !== View.ADMIN && currentView !== View.ACTIVE_GAME) && (
         <Header 
           balance={walletBalance} 
@@ -171,7 +170,7 @@ const App: React.FC = () => {
         />
       )}
       
-      <main className="flex-1 overflow-y-auto custom-scrollbar relative">
+      <main className="flex-1 overflow-hidden relative">
         {renderContent()}
       </main>
 
