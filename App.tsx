@@ -29,7 +29,7 @@ const App: React.FC = () => {
       const tg = window.Telegram.WebApp;
       tg.ready();
       tg.expand();
-      const color = isDarkMode ? '#0f172a' : '#a28cd1';
+      const color = isDarkMode ? '#0f172a' : '#065f46';
       if (tg.isVersionAtLeast && tg.isVersionAtLeast('6.1')) {
         try {
           if (typeof tg.setHeaderColor === 'function') tg.setHeaderColor(color);
@@ -148,7 +148,7 @@ const App: React.FC = () => {
     }
   };
 
-  const bgColor = isDarkMode ? 'bg-[#0f172a]' : 'bg-[#a28cd1]';
+  const bgColor = isDarkMode ? 'bg-[#0f172a]' : 'bg-[#065f46]';
 
   return (
     <div className={`flex flex-col h-[100dvh] w-full max-w-md mx-auto ${bgColor} overflow-hidden shadow-2xl relative transition-colors duration-500`}>

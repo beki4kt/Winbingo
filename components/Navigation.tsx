@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { View } from '../types';
 
@@ -26,7 +25,7 @@ const Navigation: React.FC<NavigationProps> = ({ currentView, setView, isDarkMod
     <nav className={`fixed bottom-0 left-0 right-0 ${bgColor} backdrop-blur-xl border-t flex justify-around items-center py-2 px-2 z-50 rounded-t-[2rem] shadow-[0_-10px_40px_rgba(0,0,0,0.1)] transition-all duration-500 pb-safe`}>
       {tabs.map(tab => {
         const isActive = currentView === tab.id;
-        const activeClass = isDarkMode ? 'bg-indigo-500/20 text-indigo-400' : 'bg-[#a28cd1]/20 text-[#7c56d1]';
+        const activeClass = isDarkMode ? 'bg-indigo-500/20 text-indigo-400' : 'bg-emerald-600/20 text-emerald-700';
         const inactiveClass = isDarkMode ? 'text-gray-500' : 'text-gray-400';
 
         return (

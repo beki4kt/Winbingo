@@ -79,16 +79,16 @@ const GameRoom: React.FC<GameRoomProps> = ({ onLeave, boardNumber, stake, balanc
   };
 
   const letters = ['B', 'I', 'N', 'G', 'O'];
-  const colors = ['bg-yellow-500', 'bg-green-500', 'bg-sky-500', 'bg-red-500', 'bg-purple-700'];
+  const colors = ['bg-yellow-500', 'bg-green-600', 'bg-sky-600', 'bg-red-600', 'bg-emerald-800'];
 
   const MetricBox = ({ label, value }: { label: string, value: string | number }) => (
     <div className="bg-white rounded-lg p-1 flex flex-col items-center justify-center flex-1 min-w-0 shadow-sm border border-black/5">
-      <span className="text-[7px] text-purple-400 font-black uppercase tracking-tight leading-none mb-0.5">{label}</span>
-      <span className="text-[10px] font-black text-purple-900 leading-none">{value}</span>
+      <span className="text-[7px] text-emerald-600 font-black uppercase tracking-tight leading-none mb-0.5">{label}</span>
+      <span className="text-[10px] font-black text-emerald-900 leading-none">{value}</span>
     </div>
   );
 
-  const containerBg = isDarkMode ? 'bg-[#0f172a]' : 'bg-[#a28cd1]';
+  const containerBg = isDarkMode ? 'bg-[#0f172a]' : 'bg-[#065f46]';
 
   return (
     <div className={`flex flex-col h-full ${containerBg} overflow-hidden animate-fadeIn transition-colors duration-500 pb-safe`}>
@@ -123,7 +123,7 @@ const GameRoom: React.FC<GameRoomProps> = ({ onLeave, boardNumber, stake, balanc
                       key={`${colIdx}-${rowIdx}`} 
                       className={`aspect-square flex items-center justify-center rounded-md text-[11px] font-black transition-all border ${
                         isCalled 
-                        ? 'bg-white text-purple-900 border-white shadow-[0_0_10px_rgba(255,255,255,0.4)] scale-110 z-10' 
+                        ? 'bg-white text-emerald-900 border-white shadow-[0_0_10px_rgba(255,255,255,0.4)] scale-110 z-10' 
                         : 'bg-black/20 text-white/10 border-white/5' 
                       }`}
                     >
@@ -144,7 +144,7 @@ const GameRoom: React.FC<GameRoomProps> = ({ onLeave, boardNumber, stake, balanc
                 <span className="text-[12px] font-black text-white uppercase">{gameState === 'starting' ? `Start in ${countdown}` : gameState === 'running' ? 'Live Game' : 'Final Results'}</span>
              </div>
 
-             <div className="bg-purple-900/40 rounded-2xl p-3 flex justify-between items-center border border-white/10 shadow-2xl h-20">
+             <div className="bg-emerald-900/40 rounded-2xl p-3 flex justify-between items-center border border-white/10 shadow-2xl h-20">
                 <span className="text-[10px] font-black text-white/60 uppercase tracking-widest">Next Call</span>
                 <div className="w-14 h-14 bg-orange-500 rounded-full flex items-center justify-center text-white text-3xl font-black border-4 border-white/40 shadow-[0_0_25px_rgba(249,115,22,0.6)] animate-pulse">
                   {currentCall || '-'}
@@ -173,7 +173,7 @@ const GameRoom: React.FC<GameRoomProps> = ({ onLeave, boardNumber, stake, balanc
                       className={`aspect-square flex items-center justify-center rounded-xl font-black text-base transition-all shadow-lg border-b-4 active:border-b-0 active:translate-y-1 ${
                         val === '*' ? 'bg-green-700 text-white border-green-900' : 
                         isMarked ? (isTrulyCalled ? 'bg-green-500 text-white border-green-700' : 'bg-gray-800 text-white/10 border-black shadow-none scale-95') : 
-                        'bg-white text-purple-900 border-gray-300 hover:brightness-110'
+                        'bg-white text-emerald-900 border-gray-300 hover:brightness-110'
                       } ${showCornerWin ? 'ring-4 ring-yellow-400 z-10 animate-pulse' : ''}`}
                     >
                       {val === '*' ? '★' : val}
@@ -205,7 +205,7 @@ const GameRoom: React.FC<GameRoomProps> = ({ onLeave, boardNumber, stake, balanc
       {/* WIN OVERLAY */}
       {gameState === 'ended' && (
         <div className="fixed inset-0 bg-black/95 z-[100] flex items-center justify-center p-8 animate-fadeIn backdrop-blur-2xl">
-          <div className={`${isDarkMode ? 'bg-[#1e293b]' : 'bg-purple-600'} rounded-[3rem] p-10 text-center border-4 border-white/20 shadow-[0_0_100px_rgba(255,255,255,0.1)] text-white max-w-[320px] w-full`}>
+          <div className={`${isDarkMode ? 'bg-[#1e293b]' : 'bg-emerald-700'} rounded-[3rem] p-10 text-center border-4 border-white/20 shadow-[0_0_100px_rgba(255,255,255,0.1)] text-white max-w-[320px] w-full`}>
             <div className="w-20 h-20 bg-yellow-400 rounded-full flex items-center justify-center mx-auto mb-6 shadow-2xl border-4 border-white animate-bounce">
                <i className={`fas ${winInfo ? 'fa-crown' : 'fa-skull-crossbones'} text-3xl`}></i>
             </div>
@@ -222,7 +222,7 @@ const GameRoom: React.FC<GameRoomProps> = ({ onLeave, boardNumber, stake, balanc
             ) : (
               <p className="text-white/40 text-sm mb-10 font-bold uppercase tracking-widest">Someone else claimed bingo</p>
             )}
-            <button onClick={onLeave} className="w-full py-5 bg-white text-purple-900 rounded-[2rem] font-black uppercase shadow-2xl border-b-8 border-purple-200 active:border-b-0 active:translate-y-2 transition-all">
+            <button onClick={onLeave} className="w-full py-5 bg-white text-emerald-900 rounded-[2rem] font-black uppercase shadow-2xl border-b-8 border-emerald-200 active:border-b-0 active:translate-y-2 transition-all">
               Withdraw Pot
             </button>
           </div>

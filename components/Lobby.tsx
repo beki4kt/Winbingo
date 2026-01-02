@@ -43,7 +43,7 @@ const Lobby: React.FC<LobbyProps> = ({ onStartGame, selectedNumber, setSelectedN
     }, 800);
   };
 
-  const bgColor = isDarkMode ? 'bg-[#0f172a]' : 'bg-[#a28cd1]';
+  const bgColor = isDarkMode ? 'bg-[#0f172a]' : 'bg-[#065f46]';
   const cardBg = isDarkMode ? 'bg-white/5' : 'bg-white/10';
 
   return (
@@ -88,7 +88,7 @@ const Lobby: React.FC<LobbyProps> = ({ onStartGame, selectedNumber, setSelectedN
               <div className="h-full w-full flex flex-col">
                 <div className="flex-1 grid grid-cols-5 gap-0.5 bg-white p-1 rounded-md shadow-inner">
                   {previewBoard?.flat().map((val, i) => (
-                    <div key={i} className={`aspect-square flex items-center justify-center text-[7px] font-black rounded-[2px] ${val === '*' ? 'bg-orange-500 text-white' : 'bg-purple-50 text-purple-900'}`}>
+                    <div key={i} className={`aspect-square flex items-center justify-center text-[7px] font-black rounded-[2px] ${val === '*' ? 'bg-orange-500 text-white' : 'bg-teal-50 text-teal-900'}`}>
                       {val === '*' ? '★' : val}
                     </div>
                   ))}
