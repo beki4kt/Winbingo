@@ -16,8 +16,8 @@ const Header: React.FC<HeaderProps> = ({ balance, bonus, activeGames, stake, onR
       onClick={onClick}
       className={`bg-white rounded-lg p-1.5 flex flex-col items-center justify-center shadow-sm flex-1 min-w-0 ${onClick ? 'cursor-pointer active:scale-95' : ''}`}
     >
-      <span className="text-[7px] text-purple-400 font-bold uppercase tracking-tight leading-none mb-0.5">{label}</span>
-      <span className="text-[10px] font-black text-purple-900 leading-none truncate">{value}</span>
+      <span className="text-[7px] text-emerald-600 font-bold uppercase tracking-tight leading-none mb-0.5">{label}</span>
+      <span className="text-[10px] font-black text-emerald-900 leading-none truncate">{value}</span>
     </div>
   );
 
@@ -28,7 +28,7 @@ const Header: React.FC<HeaderProps> = ({ balance, bonus, activeGames, stake, onR
           <i className="fas fa-chevron-left"></i> Back
         </button>
         <div className="text-center">
-          <h1 className="text-white font-black text-sm leading-tight">Addis Bingo</h1>
+          <h1 className="text-white font-black text-sm leading-tight">Win Bingo</h1>
           <p className="text-white/60 text-[8px] font-bold uppercase leading-none tracking-widest">mini app</p>
         </div>
         <button onClick={toggleTheme} className="text-white text-base w-8 h-8 flex items-center justify-center rounded-full bg-white/10 active:scale-90 transition-all">
