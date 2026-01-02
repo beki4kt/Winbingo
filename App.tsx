@@ -26,14 +26,11 @@ const App: React.FC = () => {
   const [isDarkMode, setIsDarkMode] = useState<boolean>(false);
 
   useEffect(() => {
-    // Initialize Telegram WebApp
     if (window.Telegram && window.Telegram.WebApp) {
       const tg = window.Telegram.WebApp;
       tg.ready();
       tg.expand();
-
       const color = isDarkMode ? '#0f172a' : '#a28cd1';
-      
       if (tg.isVersionAtLeast && tg.isVersionAtLeast('6.1')) {
         try {
           if (typeof tg.setHeaderColor === 'function') tg.setHeaderColor(color);
@@ -45,20 +42,24 @@ const App: React.FC = () => {
     }
   }, [isDarkMode]);
 
+  const safeAlert = (message: string) => {
+    const tg = window.Telegram?.WebApp;
+    if (tg && tg.isVersionAtLeast && tg.isVersionAtLeast('6.0') && typeof tg.showAlert === 'function') {
+      tg.showAlert(message);
+    } else {
+      alert(message);
+    }
+  };
+
   const handleJoinGame = (num: number, stake: number, roomId: string) => {
     if (walletBalance < stake) {
-      if (window.Telegram?.WebApp?.showAlert) {
-        window.Telegram.WebApp.showAlert("Insufficient balance! Refill your wallet.");
-      } else {
-        alert("Insufficient balance! Please deposit funds.");
-      }
+      safeAlert("Insufficient balance! Refill your wallet.");
       return;
     }
-    
-    if (window.Telegram?.WebApp?.HapticFeedback?.impactOccurred) {
-      window.Telegram.WebApp.HapticFeedback.impactOccurred('medium');
+    const tg = window.Telegram?.WebApp;
+    if (tg && tg.isVersionAtLeast && tg.isVersionAtLeast('6.1') && tg.HapticFeedback?.impactOccurred) {
+      tg.HapticFeedback.impactOccurred('medium');
     }
-
     setWalletBalance(prev => prev - stake);
     const newSession = { roomId, boardNumber: num, stake };
     const newSessions = [...activeSessions, newSession];
@@ -68,8 +69,9 @@ const App: React.FC = () => {
   };
 
   const handleLeaveGame = (roomId: string) => {
-    if (window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred) {
-      window.Telegram.WebApp.HapticFeedback.notificationOccurred('warning');
+    const tg = window.Telegram?.WebApp;
+    if (tg && tg.isVersionAtLeast && tg.isVersionAtLeast('6.1') && tg.HapticFeedback?.notificationOccurred) {
+      tg.HapticFeedback.notificationOccurred('warning');
     }
     const updated = activeSessions.filter(s => s.roomId !== roomId);
     setActiveSessions(updated);
@@ -124,7 +126,7 @@ const App: React.FC = () => {
         return <Admin isDarkMode={isDarkMode} />;
       case View.PROFILE:
         return (
-          <div className="p-8 text-white text-center animate-fadeIn min-h-full">
+          <div className="p-8 text-white text-center animate-fadeIn min-h-full pb-32">
             <div className={`w-24 h-24 ${isDarkMode ? 'bg-indigo-500/20' : 'bg-white/20'} rounded-full mx-auto mb-4 flex items-center justify-center border-4 border-white/10 shadow-lg`}>
               <i className="fas fa-user text-4xl text-white"></i>
             </div>
@@ -160,15 +162,16 @@ const App: React.FC = () => {
           onReturnToGame={returnToGame}
           isDarkMode={isDarkMode}
           toggleTheme={() => {
-            if (window.Telegram?.WebApp?.HapticFeedback?.impactOccurred) {
-              window.Telegram.WebApp.HapticFeedback.impactOccurred('light');
+            const tg = window.Telegram?.WebApp;
+            if (tg && tg.isVersionAtLeast && tg.isVersionAtLeast('6.1') && tg.HapticFeedback?.impactOccurred) {
+              tg.HapticFeedback.impactOccurred('light');
             }
             setIsDarkMode(!isDarkMode);
           }}
         />
       )}
       
-      <main className="flex-1 overflow-y-auto custom-scrollbar">
+      <main className="flex-1 overflow-y-auto custom-scrollbar relative">
         {renderContent()}
       </main>
 
@@ -176,12 +179,14 @@ const App: React.FC = () => {
         <Navigation 
           currentView={currentView} 
           setView={(v) => {
-            if (window.Telegram?.WebApp?.HapticFeedback?.impactOccurred) {
-              window.Telegram.WebApp.HapticFeedback.impactOccurred('light');
+            const tg = window.Telegram?.WebApp;
+            if (tg && tg.isVersionAtLeast && tg.isVersionAtLeast('6.1') && tg.HapticFeedback?.impactOccurred) {
+              tg.HapticFeedback.impactOccurred('light');
             }
             setCurrentView(v);
           }} 
-          isDarkMode={isDarkMode} 
+          isDarkMode={isDarkMode}
+          activeGameCount={activeSessions.length}
         />
       )}
     </div>
