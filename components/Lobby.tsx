@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { generateFairBoard } from '../utils';
 
@@ -10,113 +9,66 @@ interface LobbyProps {
   isDarkMode: boolean;
 }
 
-const Lobby: React.FC<LobbyProps> = ({ onStartGame, selectedNumber, setSelectedNumber, activeRoomIds, isDarkMode }) => {
+const Lobby: React.FC<LobbyProps> = ({ onStartGame, selectedNumber, setSelectedNumber, isDarkMode }) => {
   const [loading, setLoading] = useState(false);
-  const [stake, setStake] = useState<number>(10);
   const [otherPicks, setOtherPicks] = useState<number[]>([]);
+  const stake = 10;
   const numbers = Array.from({ length: 100 }, (_, i) => i + 1);
 
-  const stakes = [10, 25, 50, 100];
-
-  const previewBoard = useMemo(() => {
-    return selectedNumber ? generateFairBoard(selectedNumber) : null;
-  }, [selectedNumber]);
-
+  // Simulate other players picking boards
   useEffect(() => {
     const interval = setInterval(() => {
       setOtherPicks(prev => {
-        const next = [...prev];
-        if (next.length > 12) next.shift();
-        let pick;
-        do {
-          pick = Math.floor(Math.random() * 100) + 1;
-        } while (pick === selectedNumber || next.includes(pick));
-        return [...next, pick];
+        const newPick = Math.floor(Math.random() * 100) + 1;
+        const current = [...prev];
+        if (current.length > 15) current.shift();
+        if (newPick === selectedNumber || current.includes(newPick)) return current;
+        return [...current, newPick];
       });
-    }, 2000);
+    }, 2500);
     return () => clearInterval(interval);
+  }, [selectedNumber]);
+
+  const previewBoard = useMemo(() => {
+    return selectedNumber ? generateFairBoard(selectedNumber) : null;
   }, [selectedNumber]);
 
   const handleStartGameClick = () => {
     if (selectedNumber === null) return;
     setLoading(true);
     setTimeout(() => {
-      const randomRoomId = 'ARENA-' + (Math.floor(Math.random() * 8999) + 1000);
+      const randomRoomId = 'EN' + (Math.floor(Math.random() * 8999) + 1000);
       onStartGame(selectedNumber, stake, randomRoomId);
       setLoading(false);
-    }, 1000);
+    }, 800);
   };
 
-  const containerColor = isDarkMode ? 'bg-[#0f172a]' : 'bg-[#a28cd1]';
-  const gridCardColor = isDarkMode ? 'bg-gray-900/50' : 'bg-white/10';
-  const btnColor = isDarkMode ? 'bg-gray-800 text-gray-500' : 'bg-white/10 text-white/50';
-  const activeBtnColor = isDarkMode ? 'bg-indigo-600 text-white' : 'bg-white text-[#a28cd1]';
+  const bgColor = isDarkMode ? 'bg-[#0f172a]' : 'bg-[#a28cd1]';
+  const cardBg = isDarkMode ? 'bg-white/5' : 'bg-white/10';
 
   return (
-    <div className={`flex flex-col h-full ${containerColor} animate-fadeIn relative transition-colors duration-500`}>
+    <div className={`flex flex-col h-full ${bgColor} animate-fadeIn transition-colors duration-500 overflow-hidden`}>
       
-      {/* HEADER: PROTECTED SPACE FOR STAKES AND PREVIEW */}
-      <div className={`shrink-0 z-40 px-4 py-3 ${isDarkMode ? 'bg-[#0f172a]' : 'bg-[#a28cd1]'} border-b border-white/10 shadow-lg`}>
-        <div className="flex justify-between items-center mb-3">
-          <div className={`flex-1 flex gap-1 ${isDarkMode ? 'bg-black/40' : 'bg-black/10'} rounded-xl p-1`}>
-            {stakes.map(s => (
-              <button
-                key={s}
-                onClick={() => setStake(s)}
-                className={`flex-1 py-2 rounded-lg font-black text-[11px] transition-all
-                  ${stake === s ? activeBtnColor + ' shadow-md' : 'text-white/40'}`}
-              >
-                {s} ETB
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {selectedNumber ? (
-          <div className="flex gap-4 items-center bg-white/10 p-2.5 rounded-2xl animate-slideDown border border-white/5">
-            <div className={`${isDarkMode ? 'bg-gray-900' : 'bg-white'} p-1.5 rounded-lg border border-white/20 shadow-xl w-20 shrink-0`}>
-              <div className="grid grid-cols-5 gap-0.5">
-                {previewBoard?.flat().map((val, i) => (
-                  <div key={i} className={`aspect-square rounded-[1px] flex items-center justify-center text-[5px] font-black ${val === '*' ? 'bg-orange-500 text-white' : isDarkMode ? 'bg-gray-800 text-white/40' : 'bg-purple-50 text-purple-900'}`}>
-                    {val === '*' ? '★' : val}
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="flex-1">
-              <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.1em] mb-0.5">Selected Card</p>
-              <h4 className="text-2xl font-black text-white leading-none">#{selectedNumber}</h4>
-              <div className="flex items-center gap-1.5 mt-1.5">
-                <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
-                <span className="text-[9px] text-green-200 font-black uppercase tracking-wider">Ready to Enter</span>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="py-8 text-center border-2 border-dashed border-white/10 rounded-2xl">
-            <p className="text-white/30 text-[10px] font-black uppercase tracking-[0.2em]">Pick a card number to begin</p>
-          </div>
-        )}
-      </div>
-
-      {/* INDEPENDENTLY SCROLLABLE GRID */}
-      <div className="flex-1 overflow-y-auto px-4 pt-4 pb-40 custom-scrollbar">
-        <div className={`${gridCardColor} p-4 rounded-[2.5rem] border border-white/5 shadow-2xl`}>
-          <div className="grid grid-cols-10 gap-2 justify-items-center">
+      {/* 1-100 GRID - Scaled to fit perfectly in one view without scrolling */}
+      <div className="flex-1 px-4 flex flex-col justify-center items-center overflow-hidden">
+        <div className={`${cardBg} p-1 rounded-xl border border-white/5 shadow-inner w-full max-w-[360px]`}>
+          <div className="grid grid-cols-10 gap-0.5 sm:gap-1 justify-items-center">
             {numbers.map((num) => {
-              const isUserSelected = selectedNumber === num;
-              const isOtherSelected = otherPicks.includes(num);
+              const isActive = selectedNumber === num;
+              const isOther = otherPicks.includes(num);
               
+              let btnStyle = isDarkMode ? 'bg-white/5 text-white/20 border-white/5' : 'bg-white/10 text-white/40 border-white/5';
+              if (isActive) {
+                btnStyle = 'bg-green-500 text-white border-green-700 shadow-lg scale-110 z-10';
+              } else if (isOther) {
+                btnStyle = 'bg-orange-500 text-white border-orange-700 opacity-90';
+              }
+
               return (
                 <button
                   key={num}
                   onClick={() => setSelectedNumber(num)}
-                  className={`w-full aspect-square rounded-xl text-[12px] font-black flex items-center justify-center transition-all duration-300
-                    ${isUserSelected 
-                      ? activeBtnColor + ' scale-110 shadow-2xl ring-2 ring-white/60 z-10' 
-                      : isOtherSelected 
-                      ? 'bg-orange-500/20 text-orange-200/40 ring-1 ring-orange-500/30' 
-                      : btnColor + ' hover:bg-white/20'}`}
+                  className={`w-full aspect-square rounded-sm text-[7px] font-black flex items-center justify-center transition-all border-b-2 ${btnStyle} hover:brightness-110`}
                 >
                   {num}
                 </button>
@@ -126,32 +78,51 @@ const Lobby: React.FC<LobbyProps> = ({ onStartGame, selectedNumber, setSelectedN
         </div>
       </div>
 
-      {/* FLOATING ACTION DOCK */}
-      <div className={`fixed bottom-[88px] left-0 right-0 px-6 py-4 flex gap-4 justify-center items-center z-40 ${isDarkMode ? 'bg-gray-900/90' : 'bg-[#a28cd1]/90'} backdrop-blur-md border-t border-white/10 rounded-t-3xl`}>
-        <button 
-          onClick={() => {
-            setSelectedNumber(null);
-            setOtherPicks([]);
-          }} 
-          className="w-14 h-14 bg-white/10 text-white rounded-2xl flex items-center justify-center shadow-lg active:scale-90 transition-transform border border-white/10"
-        >
-          <i className="fas fa-rotate text-lg"></i>
-        </button>
-        <button 
-          onClick={handleStartGameClick} 
-          disabled={selectedNumber === null || loading} 
-          className={`flex-1 h-14 rounded-2xl font-black text-sm shadow-2xl transition-all active:scale-95 uppercase border-b-4 flex items-center justify-center gap-3
-            ${selectedNumber === null || loading 
-              ? 'bg-gray-400/20 text-white/20 border-black/10' 
-              : 'bg-[#f07156] text-white border-red-800'}`}
-        >
-          {loading ? <i className="fas fa-circle-notch animate-spin"></i> : (
-            <>
-              <i className="fas fa-play text-xs"></i>
-              Start Game
-            </>
+      {/* PREVIEW + START ACTIONS (BOTTOM) */}
+      <div className="bg-transparent px-4 pb-20 shrink-0 flex flex-col gap-2">
+        
+        {/* CARD PREVIEW SPACE - LITERALLY EMPTY UNTIL SELECTED */}
+        <div className="flex justify-start px-1 h-28 items-center">
+          {selectedNumber ? (
+            <div className={`w-24 h-24 ${isDarkMode ? 'bg-white/5' : 'bg-white/20'} rounded-lg border border-white/20 p-1 flex flex-col items-center justify-center shadow-lg animate-fadeIn`}>
+              <div className="h-full w-full flex flex-col">
+                <div className="flex-1 grid grid-cols-5 gap-0.5 bg-white p-0.5 rounded-sm">
+                  {previewBoard?.flat().map((val, i) => (
+                    <div key={i} className={`aspect-square flex items-center justify-center text-[4px] font-black rounded-[0.2px] ${val === '*' ? 'bg-orange-500 text-white' : 'bg-purple-50 text-purple-900'}`}>
+                      {val === '*' ? '★' : val}
+                    </div>
+                  ))}
+                </div>
+                <div className="text-center pt-0.5">
+                   <span className="text-[6px] font-black text-white/80 uppercase tracking-tighter leading-none">Card {selectedNumber}</span>
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* LITERALLY EMPTY SPACE REMAINS AS A SPACER */
+            <div className="w-24 h-24" />
           )}
-        </button>
+        </div>
+
+        {/* BOTTOM BUTTONS */}
+        <div className="flex gap-2 h-12">
+          <button 
+            onClick={() => window.location.reload()}
+            className="flex-1 bg-sky-500 text-white font-black rounded-full shadow-lg border-b-4 border-sky-700 active:border-b-0 active:translate-y-1 transition-all uppercase tracking-widest text-[10px]"
+          >
+            Refresh
+          </button>
+          <button 
+            onClick={handleStartGameClick}
+            disabled={selectedNumber === null || loading}
+            className={`flex-1 font-black rounded-full shadow-lg transition-all uppercase tracking-widest text-[10px] border-b-4 
+              ${selectedNumber === null || loading 
+                ? 'bg-gray-400 text-gray-200 border-gray-600' 
+                : 'bg-orange-500 text-white border-orange-700 active:border-b-0 active:translate-y-1'}`}
+          >
+            {loading ? <i className="fas fa-spinner animate-spin"></i> : 'Start Game'}
+          </button>
+        </div>
       </div>
     </div>
   );
