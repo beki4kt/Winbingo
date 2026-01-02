@@ -1,93 +1,82 @@
 import os
-import json
-import httpx
-from fastapi import FastAPI, Request
-from .database import register_user, get_user, update_balance
+from supabase import create_client
 
-app = FastAPI()
-TOKEN = os.getenv("BOT_TOKEN")
-# Make sure WEBAPP_URL is in Vercel Env Vars (e.g. https://your-github.io/repo/)
-WEBAPP_URL = os.getenv("WEBAPP_URL") 
-BASE_URL = f"https://api.telegram.org/bot{TOKEN}"
+# Initialize Supabase
+url = os.environ.get("SUPABASE_URL")
+key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+supabase = create_client(url, key)
 
-async def call_api(method, payload):
-    async with httpx.AsyncClient() as client:
-        response = await client.post(f"{BASE_URL}/{method}", json=payload)
-        return response.json()
+# --- USER FUNCTIONS ---
 
-@app.post("/webhook")
-async def handle_webhook(request: Request):
-    update = await request.json()
-    
-    # 1. Handle Messages (Text & /start)
-    if "message" in update:
-        msg = update["message"]
-        chat_id = msg["chat"]["id"]
-        user_id = msg["from"]["id"]
-        first_name = msg["from"].get("first_name", "Player")
+def register_user(user_id, first_name, phone):
+    try:
+        data = {
+            "user_id": user_id,
+            "first_name": first_name,
+            "phone": phone,
+            "balance": 100.0  # Sign-up bonus
+        }
+        supabase.table("users").insert(data).execute()
+        return True
+    except Exception as e:
+        print(f"Registration Error: {e}")
+        return False
 
-        # --- COMMAND: /start ---
-        if "text" in msg and msg["text"] == "/start":
-            user = get_user(user_id)
-            if not user:
-                # Ask for registration
-                payload = {
-                    "chat_id": chat_id,
-                    "text": f"👋 Welcome {first_name} to Addis Bingo!\n\nPlease register to get your 100 bonus coins.",
-                    "reply_markup": {
-                        "keyboard": [[{"text": "📱 Register with Phone", "request_contact": True}]],
-                        "resize_keyboard": True, "one_time_keyboard": True
-                    }
-                }
-            else:
-                # Show Main Menu
-                payload = {
-                    "chat_id": chat_id,
-                    "text": f"🕹 Welcome back, {user['first_name']}!\n💰 Balance: {user['balance']} coins",
-                    "reply_markup": {
-                        "inline_keyboard": [[{"text": "🎮 Play Bingo Now", "web_app": {"url": WEBAPP_URL}}]]
-                    }
-                }
-            await call_api("sendMessage", payload)
+def get_user(user_id):
+    try:
+        res = supabase.table("users").select("*").eq("user_id", user_id).execute()
+        return res.data[0] if res.data else None
+    except:
+        return None
 
-        # --- CONTACT: Phone Registration ---
-        elif "contact" in msg:
-            contact = msg["contact"]
-            if register_user(user_id, first_name, contact["phone_number"]):
-                await call_api("sendMessage", {
-                    "chat_id": chat_id, 
-                    "text": "✅ Registered! 100 coins added. Type /start to play!"
-                })
+def update_balance(user_id, amount, action):
+    try:
+        user = get_user(user_id)
+        if user:
+            new_balance = float(user['balance']) + float(amount)
+            supabase.table("users").update({"balance": new_balance}).eq("user_id", user_id).execute()
+            
+            # Log to transaction history
+            supabase.table("history").insert({
+                "user_id": user_id, 
+                "amount": amount, 
+                "action": action
+            }).execute()
+            return new_balance
+    except Exception as e:
+        print(f"Balance Update Error: {e}")
+    return 0
 
-        # --- WEBAPP DATA: Handling Win/Loss ---
-        elif "web_app_data" in msg:
-            data = json.loads(msg["web_app_data"]["data"])
-            if "win" in data:
-                amount = data["win"]
-                new_bal = update_balance(user_id, amount, "Bingo Win")
-                await call_api("sendMessage", {
-                    "chat_id": chat_id, 
-                    "text": f"🎊 BINGO! You won {amount} coins!\nNew Balance: {new_bal}"
-                })
+# --- ADMIN REQUEST FUNCTIONS ---
 
-    return {"ok": True}
+def log_request(user_id, amount, req_type):
+    """Logs a pending deposit or withdrawal request."""
+    try:
+        data = {
+            "user_id": user_id,
+            "amount": amount,
+            "type": req_type,
+            "status": "pending"
+        }
+        res = supabase.table("requests").insert(data).execute()
+        return res.data[0]['id'] if res.data else 0
+    except Exception as e:
+        print(f"Log Request Error: {e}")
+        return 0
 
-@app.get("/")
-def health():
-    return {"status": "Bingo Bot is Online"}
-# --- COMMAND: /balance ---
-if text == "/balance":
-    user = get_user(user_id)
-    await call_api("sendMessage", {
-        "chat_id": chat_id,
-        "text": f"💰 *Your Wallet*\n\nBalance: {user['balance']} coins\nStatus: Verified ✅",
-        "parse_mode": "Markdown"
-    })
+def update_request_status(req_id, status):
+    """Updates status to 'approved' or 'rejected'."""
+    try:
+        supabase.table("requests").update({"status": status}).eq("id", req_id).execute()
+        return True
+    except Exception as e:
+        print(f"Update Status Error: {e}")
+        return False
 
-# --- COMMAND: /support ---
-elif text == "/support":
-    await call_api("sendMessage", {
-        "chat_id": chat_id,
-        "text": "📞 *Customer Support*\n\nIssues with coins? Contact us:\n@YourSupportUsername\n\nOr join our community: [Link]",
-        "parse_mode": "Markdown"
-    })    
+def get_pending_requests():
+    """Fetches all requests waiting for admin action."""
+    try:
+        res = supabase.table("requests").select("*").eq("status", "pending").execute()
+        return res.data
+    except:
+        return []
