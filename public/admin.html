@@ -1,109 +1,83 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <title>Addis Bingo | Professional Admin</title>
+    <title>Addis Bingo Admin</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        :root { --primary: #0088cc; --bg: #f0f2f5; --white: #ffffff; }
-        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); margin: 0; display: flex; }
-        
-        /* Sidebar */
-        .sidebar { width: 250px; background: #2c3e50; color: white; height: 100vh; padding: 20px; position: fixed; }
-        .sidebar h2 { border-bottom: 1px solid #555; padding-bottom: 10px; }
-        
-        /* Main Content */
-        .main { margin-left: 280px; padding: 40px; width: calc(100% - 300px); }
-        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; }
-        .card { background: var(--white); padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-        .card h3 { margin: 0; color: #777; font-size: 0.9rem; text-transform: uppercase; }
-        .card .value { font-size: 2rem; font-weight: bold; margin-top: 10px; color: #333; }
-        
-        /* Charts & Tables */
-        .chart-container { background: white; margin-top: 30px; padding: 20px; border-radius: 12px; }
-        table { width: 100%; margin-top: 30px; border-collapse: collapse; background: white; border-radius: 12px; overflow: hidden; }
-        th, td { padding: 15px; text-align: left; border-bottom: 1px solid #eee; }
-        th { background: #f8f9fa; color: #555; }
-        .badge { padding: 5px 10px; border-radius: 20px; font-size: 0.8rem; }
-        .pending { background: #fff3cd; color: #856404; }
-        .approved { background: #d4edda; color: #155724; }
+        body { font-family: 'Segoe UI', sans-serif; margin: 0; background: #f4f7f6; }
+        #login-container { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; }
+        #admin-content { display: none; padding: 20px; }
+        .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 20px; }
+        .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .btn-send { background: #0088cc; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; }
     </style>
 </head>
 <body>
-    <div class="sidebar">
-        <h2>Bingo Admin</h2>
-        <p>🔴 Live System Online</p>
+
+<div id="login-container">
+    <h1>🔒 Restricted Access</h1>
+    <script async src="https://telegram.org/js/telegram-widget.js?22" 
+            data-telegram-login="YOUR_BOT_USERNAME" 
+            data-size="large" 
+            data-onauth="onTelegramAuth(user)" 
+            data-request-access="write"></script>
+</div>
+
+<div id="admin-content">
+    <div class="stats-grid">
+        <div class="card"><h3>Total Users</h3><p id="stat-users">0</p></div>
+        <div class="card"><h3>Total Revenue</h3><p id="stat-rev">0 ETB</p></div>
+        <div class="card"><h3>Pending</h3><p id="stat-pending">0</p></div>
     </div>
 
-    <div class="main">
-        <div class="stats-grid">
-            <div class="card"><h3>Total Users</h3><div class="value" id="stat-users">0</div></div>
-            <div class="card"><h3>Total Revenue</h3><div class="value" id="stat-rev">0 ETB</div></div>
-            <div class="card"><h3>Active Games</h3><div class="value" id="stat-pending">0</div></div>
-        </div>
-
-        <div class="chart-container">
-            <canvas id="revenueChart"></canvas>
-        </div>
-
-        <table>
-            <thead>
-                <tr>
-                    <th>User ID</th>
-                    <th>Type</th>
-                    <th>Amount</th>
-                    <th>Status</th>
-                    <th>Time</th>
-                </tr>
-            </thead>
-            <tbody id="request-list"></tbody>
-        </table>
+    <div class="card">
+        <h3>📢 Send Global Announcement</h3>
+        <textarea id="bc-text" style="width:100%; height:80px;" placeholder="Enter message..."></textarea>
+        <button class="btn-send" onclick="broadcast()">🚀 Broadcast to All</button>
     </div>
+</div>
 
-    <script>
-        const SB_URL = 'YOUR_SUPABASE_URL';
-        const SB_KEY = 'YOUR_SUPABASE_ANON_KEY';
-        const _supabase = supabase.createClient(SB_URL, SB_KEY);
+<script>
+    const ADMIN_ID = YOUR_NUMERIC_ID; 
+    const SB_URL = 'YOUR_SUPABASE_URL';
+    const SB_KEY = 'YOUR_SUPABASE_ANON_KEY';
+    const _supabase = supabase.createClient(SB_URL, SB_KEY);
 
-        // Initialize Chart
-        const ctx = document.getElementById('revenueChart').getContext('2d');
-        const revenueChart = new Chart(ctx, {
-            type: 'line',
-            data: { labels: [], datasets: [{ label: 'Daily Revenue', data: [], borderColor: '#0088cc', tension: 0.4 }] }
-        });
-
-        async function refreshAdmin() {
-            // 1. Fetch Stats
-            const { data: users } = await _supabase.from('users').select('*');
-            const { data: reqs } = await _supabase.from('requests').select('*').order('created_at', { ascending: false });
-            
-            document.getElementById('stat-users').innerText = users.length;
-            document.getElementById('stat-rev').innerText = reqs.filter(r => r.status === 'approved').reduce((a, b) => a + b.amount, 0) + " ETB";
-            document.getElementById('stat-pending').innerText = reqs.filter(r => r.status === 'pending').length;
-
-            // 2. Update Table
-            const list = document.getElementById('request-list');
-            list.innerHTML = reqs.map(r => `
-                <tr>
-                    <td>${r.user_id}</td>
-                    <td>${r.type}</td>
-                    <td>${r.amount}</td>
-                    <td><span class="badge ${r.status}">${r.status}</span></td>
-                    <td>${new Date(r.created_at).toLocaleTimeString()}</td>
-                </tr>
-            `).join('');
+    function onTelegramAuth(user) {
+        if (user.id === ADMIN_ID) {
+            localStorage.setItem('verified_admin', user.id);
+            location.reload();
+        } else {
+            alert("Access Denied.");
         }
+    }
 
-        // 3. REALTIME: Listen for new deposits
-        _supabase.channel('custom-all-channel')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'requests' }, (payload) => {
-                console.log('Change received!', payload);
-                refreshAdmin(); // Automatically refresh UI on any database change
-            })
-            .subscribe();
+    async function broadcast() {
+        const message = document.getElementById('bc-text').value;
+        const res = await fetch('/api/broadcast', {
+            method: 'POST',
+            body: JSON.stringify({ admin_id: ADMIN_ID, message: message })
+        });
+        const data = await res.json();
+        alert(`Sent to ${data.sent_to} users!`);
+    }
 
-        refreshAdmin();
-    </script>
+    window.onload = () => {
+        if (localStorage.getItem('verified_admin') == ADMIN_ID) {
+            document.getElementById('login-container').style.display = 'none';
+            document.getElementById('admin-content').style.display = 'block';
+            loadData();
+        }
+    };
+
+    async function loadData() {
+        const { data: users } = await _supabase.from('users').select('*');
+        const { data: reqs } = await _supabase.from('requests').select('*');
+        document.getElementById('stat-users').innerText = users.length;
+        document.getElementById('stat-rev').innerText = reqs.filter(r => r.status === 'approved').reduce((a, b) => a + b.amount, 0);
+        document.getElementById('stat-pending').innerText = reqs.filter(r => r.status === 'pending').length;
+    }
+</script>
 </body>
 </html>
