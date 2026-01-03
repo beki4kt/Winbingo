@@ -4,7 +4,7 @@ from fastapi import FastAPI, Request
 from .database import (
     register_user, get_user, update_user_state, get_user_state, 
     clear_user_state, log_withdrawal, update_request_status,
-    process_transfer, get_transaction_history
+    process_transfer, get_history
 )
 
 app = FastAPI()
@@ -20,49 +20,75 @@ async def call_api(method, payload):
 @app.post("/webhook")
 async def handle_webhook(request: Request):
     update = await request.json()
+    
+    # --- A. HANDLE BUTTONS (CALLBACKS) ---
+    if "callback_query" in update:
+        query = update["callback_query"]; data = query["data"]; u_id = query["from"]["id"]
+        
+        if data == "wit":
+            update_user_state(u_id, "AWAITING_METHOD")
+            await call_api("sendMessage", {"chat_id": u_id, "text": "🏦 *Select Method:*", "reply_markup": {"inline_keyboard": [[{"text": "Telebirr", "callback_data": "meth_telebirr"}]]}, "parse_mode": "Markdown"})
+        
+        elif data == "meth_telebirr":
+            update_user_state(u_id, "AWAITING_PHONE", {"method": "Telebirr"})
+            await call_api("sendMessage", {"chat_id": u_id, "text": "📱 Enter Telebirr Number (10 digits):"})
+
+        elif data == "confirm_wit":
+            state = get_user_state(u_id)
+            d = state['temp_data']
+            req_id = log_withdrawal(u_id, d['amount'], d['method'], d['phone'], d['name'])
+            await call_api("sendMessage", {"chat_id": u_id, "text": "✅ Withdrawal Request Sent!"})
+            clear_user_state(u_id)
+            # Notify Admin
+            await call_api("sendMessage", {"chat_id": ADMIN_ID, "text": f"🚨 *Withdrawal Alert*\nPhone: {d['phone']}\nAmt: {d['amount']}", "reply_markup": {"inline_keyboard": [[{"text": "Mark Paid", "callback_data": f"paid_{req_id}_{u_id}"}]]}})
+        return {"ok": True}
+
+    # --- B. HANDLE COMMANDS & MESSAGES ---
     if "message" not in update: return {"ok": True}
-    
-    msg = update["message"]
-    u_id = msg["from"]["id"]
-    text = msg.get("text", "")
+    msg = update["message"]; u_id = msg["from"]["id"]; text = msg.get("text", "")
 
-    # --- 1. TRANSFER LOGIC (/transfer UserID Amount) ---
-    if text.startswith("/transfer"):
-        parts = text.split()
-        if len(parts) != 3:
-            await call_api("sendMessage", {"chat_id": u_id, "text": "❌ Usage: `/transfer [UserID] [Amount]`", "parse_mode": "Markdown"})
-        else:
+    # State Check (For Withdrawal Input)
+    state_obj = get_user_state(u_id)
+    if state_obj:
+        state = state_obj['state']; temp = state_obj['temp_data']
+        if state == "AWAITING_PHONE":
+            temp['phone'] = text; update_user_state(u_id, "AWAITING_NAME", temp)
+            await call_api("sendMessage", {"chat_id": u_id, "text": "👤 Enter Account Name:"})
+            return {"ok": True}
+        elif state == "AWAITING_NAME":
+            temp['name'] = text; update_user_state(u_id, "AWAITING_AMOUNT", temp)
+            await call_api("sendMessage", {"chat_id": u_id, "text": "💰 Enter Amount:"})
+            return {"ok": True}
+        elif state == "AWAITING_AMOUNT":
             try:
-                target_id = int(parts[1])
-                amount = float(parts[2])
-                result = process_transfer(u_id, target_id, amount)
-                await call_api("sendMessage", {"chat_id": u_id, "text": result})
-                if "✅" in result: # Notify recipient
-                    await call_api("sendMessage", {"chat_id": target_id, "text": f"💰 You received {amount} ETB from {u_id}!"})
-            except ValueError:
-                await call_api("sendMessage", {"chat_id": u_id, "text": "❌ Invalid ID or Amount."})
-        return {"ok": True}
+                amt = float(text); user = get_user(u_id)
+                if amt >= 50 and amt <= user['balance']:
+                    temp['amount'] = amt; update_user_state(u_id, "AWAITING_CONFIRM", temp)
+                    await call_api("sendMessage", {"chat_id": u_id, "text": f"📝 Confirm: {amt} ETB to {temp['phone']}?", "reply_markup": {"inline_keyboard": [[{"text": "Confirm", "callback_data": "confirm_wit"}]]}})
+                else: await call_api("sendMessage", {"chat_id": u_id, "text": "❌ Invalid amount."})
+            except: pass
+            return {"ok": True}
 
-    # --- 2. HISTORY LOGIC ---
-    elif text == "/check_transaction":
-        history = get_transaction_history(u_id)
-        if not history:
-            response = "📭 No transactions found."
-        else:
-            response = "📜 *Recent Transactions:*\n\n" + "\n".join(
-                [f"🔹 {h['type'].title()}: {h['amount']} ETB ({h['status']})" for h in history[:10]]
-            )
-        await call_api("sendMessage", {"chat_id": u_id, "text": response, "parse_mode": "Markdown"})
-        return {"ok": True}
-
-    # --- 3. COMMAND MENU REPLICATION ---
-    elif text == "/balance":
+    # Commands Logic
+    if text == "/balance":
         user = get_user(u_id)
-        await call_api("sendMessage", {"chat_id": u_id, "text": f"💳 *Account Balance:*\n`{user['balance']} ETB`", "parse_mode": "Markdown"})
-
-    elif text == "/invite":
-        await call_api("sendMessage", {"chat_id": u_id, "text": f"👥 *Invite & Earn*\nLink: `t.me/AddisBingoBot?start={u_id}`", "parse_mode": "Markdown"})
-
-    # ... (Keep existing Registration and Withdrawal state logic here) ...
+        await call_api("sendMessage", {"chat_id": u_id, "text": f"💰 *Balance:* `{user['balance']} ETB`", "parse_mode": "Markdown"})
     
+    elif text.startswith("/transfer"):
+        # Usage: /transfer 123456 50
+        try:
+            _, target, amt = text.split(); res = process_transfer(u_id, int(target), float(amt))
+            await call_api("sendMessage", {"chat_id": u_id, "text": res})
+        except: await call_api("sendMessage", {"chat_id": u_id, "text": "❌ Format: `/transfer ID Amount`"})
+
+    elif text == "/check_transaction":
+        history = get_history(u_id, "transaction")
+        res = "🧾 *Transactions:*\n" + "\n".join([f"• {h['type']}: {h['amount']} ETB" for h in history])
+        await call_api("sendMessage", {"chat_id": u_id, "text": res, "parse_mode": "Markdown"})
+
+    elif text == "/game_history":
+        history = get_history(u_id, "game")
+        res = "🎮 *Game History:*\n" + "\n".join([f"• {h['game']}: {h['result']} ({h['amount']} ETB)" for h in history])
+        await call_api("sendMessage", {"chat_id": u_id, "text": res, "parse_mode": "Markdown"})
+
     return {"ok": True}
