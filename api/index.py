@@ -92,3 +92,15 @@ async def handle_webhook(request: Request):
         await call_api("sendMessage", {"chat_id": u_id, "text": res, "parse_mode": "Markdown"})
 
     return {"ok": True}
+    from telegram import ReplyKeyboardMarkup, KeyboardButton
+
+def main_menu():
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton("🎮 Play Bingo")],
+            [KeyboardButton("💰 Wallet"), KeyboardButton("👥 Refer & Earn")],
+            [KeyboardButton("⚙️ Help & Support")]
+        ],
+        resize_keyboard=True, # Makes buttons smaller and professional
+        is_persistent=True    # Keeps the menu visible even when typing
+    )
