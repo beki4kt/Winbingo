@@ -119,3 +119,6 @@ async def handle_webhook(request: Request):
                 pass
 
     return {"ok": True}
+    @app.get("/")
+def home():
+    return {"status": "Online", "message": "Addis Bingo Bot is running"}
