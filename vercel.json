@@ -1,7 +1,13 @@
 {
+  "version": 2,
   "rewrites": [
-    { "source": "/admin-panel", "destination": "/public/admin.html" },
-    { "source": "/webhook", "destination": "/api/index.py" },
-    { "source": "/", "destination": "/api/index.py" }
+    {
+      "source": "/admin-panel",
+      "destination": "/public/admin.html"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/api/index.py"
+    }
   ]
 }

@@ -5,6 +5,9 @@ from fastapi import FastAPI, Request
 from .database import register_user, get_user, update_balance, log_request, update_request_status, get_pending_requests
 
 app = FastAPI()
+@app.get("/")
+async def root():
+    return {"status": "running", "message": "Addis Bingo Bot is Online"}
 TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "0")) # Add your ID to Vercel Env Vars!
 WEBAPP_URL = os.getenv("WEBAPP_URL")
