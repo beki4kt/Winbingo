@@ -1,12 +1,21 @@
 import os
 import httpx
 from fastapi import FastAPI, Request
-from .database import (
-    register_user, get_user, update_user_state, get_user_state, 
-    clear_user_state, log_withdrawal, update_request_status,
-    process_transfer, get_history
-)
 
+# Change this line to use the full path from the root
+try:
+    from api.database import (
+        register_user, get_user, update_user_state, get_user_state, 
+        clear_user_state, log_withdrawal, update_request_status,
+        process_transfer, get_history
+    )
+except ImportError:
+    # Local development fallback
+    from database import (
+        register_user, get_user, update_user_state, get_user_state, 
+        clear_user_state, log_withdrawal, update_request_status,
+        process_transfer, get_history
+    )
 app = FastAPI()
 TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
