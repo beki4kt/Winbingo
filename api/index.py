@@ -16,7 +16,12 @@ except ImportError:
         process_transfer, get_history
     )
 
-app = FastAPI()
+app = FastAPI(redirect_slashes=False) # Add this to stop FastAPI from redirecting
+
+@app.post("/webhook")
+@app.post("/webhook/") # Add both versions to be safe
+async def handle_webhook(request: Request):
+    # ... your code ...
 TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 BASE_URL = f"https://api.telegram.org/bot{TOKEN}"
