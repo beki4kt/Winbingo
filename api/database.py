@@ -1,10 +1,11 @@
 import os
 from supabase import create_client
 
-# Environment Variables
-url = os.environ.get("SUPABASE_URL")
-key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
-supabase = create_client(url, key)
+# Supabase Setup
+supabase = create_client(
+    os.getenv("SUPABASE_URL", ""), 
+    os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
+)
 
 def get_user(user_id):
     res = supabase.table("users").select("*").eq("user_id", user_id).execute()
@@ -29,31 +30,20 @@ def log_withdrawal(u_id, amount, method, phone, name):
     user = get_user(u_id)
     new_bal = float(user['balance']) - float(amount)
     supabase.table("users").update({"balance": new_bal}).eq("user_id", u_id).execute()
-    
-    data = {
-        "user_id": u_id, 
-        "amount": amount, 
-        "type": "withdrawal", 
-        "status": "pending",
-        "meta": {"method": method, "phone": phone, "name": name}
-    }
-    res = supabase.table("requests").insert(data).execute()
+    res = supabase.table("requests").insert({"user_id": u_id, "amount": amount, "status": "pending", "meta": {"phone": phone, "name": name}}).execute()
     return res.data[0]['id']
 
 def update_request_status(req_id, status):
     supabase.table("requests").update({"status": status}).eq("id", req_id).execute()
 
 def process_transfer(sender_id, receiver_id, amt):
-    sender = get_user(sender_id)
-    receiver = get_user(receiver_id)
+    sender = get_user(sender_id); receiver = get_user(receiver_id)
     if not receiver: return "❌ Recipient not found."
     if sender['balance'] < amt: return "❌ Insufficient funds."
-    
     supabase.table("users").update({"balance": sender['balance'] - amt}).eq("user_id", sender_id).execute()
     supabase.table("users").update({"balance": receiver['balance'] + amt}).eq("user_id", receiver_id).execute()
     return "✅ Transfer Successful!"
 
 def get_history(u_id, category):
-    # This assumes you have a table named 'history' or 'requests'
     res = supabase.table("requests").select("*").eq("user_id", u_id).limit(10).execute()
     return res.data
