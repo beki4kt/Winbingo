@@ -2,28 +2,22 @@ import os
 import httpx
 from fastapi import FastAPI, Request
 
-# VERCEL FIX: Use a robust import strategy for serverless functions
+# Vercel-friendly import strategy
 try:
     from api.database import (
-        register_user, get_user, update_user_state, get_user_state, 
-        clear_user_state, log_withdrawal, update_request_status,
+        get_user, register_user, update_user_state, 
+        get_user_state, clear_user_state, log_withdrawal, 
         process_transfer, get_history
     )
 except ImportError:
     from database import (
-        register_user, get_user, update_user_state, get_user_state, 
-        clear_user_state, log_withdrawal, update_request_status,
+        get_user, register_user, update_user_state, 
+        get_user_state, clear_user_state, log_withdrawal, 
         process_transfer, get_history
     )
 
-app = FastAPI(redirect_slashes=False) # Add this to stop FastAPI from redirecting
-
-@app.post("/webhook")
-@app.post("/webhook/") # Add both versions to be safe
-async def handle_webhook(request: Request):
-    # ... your code ...
+app = FastAPI()
 TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 BASE_URL = f"https://api.telegram.org/bot{TOKEN}"
 
 async def call_api(method, payload):
@@ -33,27 +27,51 @@ async def call_api(method, payload):
 
 @app.post("/webhook")
 async def handle_webhook(request: Request):
-    update = await request.json()
-    print(f"DEBUG: Received Update -> {update}") # Check Vercel Logs for this!
+    try:
+        update = await request.json()
+        print(f"DEBUG_RECEIVE: {update}") # Check 'Functions' logs in Vercel for this
 
-    if "message" not in update: return {"ok": True}
-    
-    msg = update["message"]
-    u_id = msg["from"]["id"]
-    text = msg.get("text", "")
+        if "message" not in update:
+            return {"ok": True}
 
-    # Basic response test
-    if text == "/start":
-        await call_api("sendMessage", {
-            "chat_id": u_id, 
-            "text": "🚀 *Bot Online!*\nI am connected to the database.",
-            "parse_mode": "Markdown"
-        })
-    
-    # ... (Rest of your command logic goes here) ...
+        msg = update["message"]
+        u_id = msg["from"]["id"]
+        first_name = msg["from"].get("first_name", "User")
+        text = msg.get("text", "")
 
-    return {"ok": True}
+        # 1. Start Command / Registration
+        if text == "/start":
+            user = get_user(u_id)
+            if not user:
+                # Register new user with 100 ETB bonus
+                register_user(u_id, first_name, "Not Provided")
+                welcome_text = f"👋 Hello {first_name}!\n\nWelcome to Bingo ET! You've received a 100 ETB bonus. 🎁\n\nUse the Menu button to explore."
+            else:
+                welcome_text = f"Welcome back, {first_name}!\nYour balance: {user['balance']} ETB"
+            
+            await call_api("sendMessage", {"chat_id": u_id, "text": welcome_text, "parse_mode": "Markdown"})
+
+        # 2. Balance Check
+        elif text == "/balance":
+            user = get_user(u_id)
+            await call_api("sendMessage", {"chat_id": u_id, "text": f"💰 *Current Balance:* `{user['balance']} ETB`", "parse_mode": "Markdown"})
+
+        # 3. Handle Transfers
+        elif text.startswith("/transfer"):
+            try:
+                _, target_id, amount = text.split()
+                result = process_transfer(u_id, int(target_id), float(amount))
+                await call_api("sendMessage", {"chat_id": u_id, "text": result})
+            except:
+                await call_api("sendMessage", {"chat_id": u_id, "text": "❌ Use: `/transfer [ID] [Amount]`"})
+
+        return {"ok": True}
+
+    except Exception as e:
+        print(f"CRITICAL_ERROR: {str(e)}")
+        return {"ok": False, "error": str(e)}
 
 @app.get("/")
+@app.get("/api")
 async def health_check():
-    return {"status": "Vercel server is running!"}
+    return {"status": "Vercel server is live!", "token_detected": bool(TOKEN)}
