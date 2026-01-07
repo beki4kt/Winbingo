@@ -1,7 +1,6 @@
 import os
 from supabase import create_client
 
-# Load Supabase credentials from Environment Variables
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -10,52 +9,15 @@ def get_user(user_id):
     res = supabase.table("users").select("*").eq("user_id", user_id).execute()
     return res.data[0] if res.data else None
 
-def register_user(user_id, first_name, phone):
-    data = {
-        "user_id": user_id, 
-        "first_name": first_name, 
-        "phone": phone, 
-        "balance": 100.0
-    }
-    supabase.table("users").upsert(data, on_conflict="user_id").execute()
+ddef register_user(user_id, first_name, phone):
+    # Check if user already exists to avoid double bonuses
+    existing = get_user(user_id)
+    if not existing:
+        data = {
+            "user_id": user_id, 
+            "first_name": first_name, 
+            "phone": phone, 
+            "balance": 100.0  # Initial Bonus
+        }
+        supabase.table("users").insert(data).execute()
     return True
-
-def update_user_state(user_id, state, temp_data={}):
-    supabase.table("user_states").upsert({"user_id": user_id, "state": state, "temp_data": temp_data}).execute()
-
-def get_user_state(user_id):
-    res = supabase.table("user_states").select("*").eq("user_id", user_id).execute()
-    return res.data[0] if res.data else None
-
-def clear_user_state(user_id):
-    supabase.table("user_states").delete().eq("user_id", user_id).execute()
-
-def process_transfer(sender_id, receiver_id, amt):
-    sender = get_user(sender_id)
-    receiver = get_user(receiver_id)
-    
-    if not receiver: return "❌ User not found."
-    if sender['balance'] < amt: return "❌ Insufficient balance."
-    
-    # Update balances
-    supabase.table("users").update({"balance": sender['balance'] - amt}).eq("user_id", sender_id).execute()
-    supabase.table("users").update({"balance": receiver['balance'] + amt}).eq("user_id", receiver_id).execute()
-    
-    return f"✅ Successfully transferred {amt} ETB to {receiver['first_name']}!"
-
-def log_withdrawal(u_id, amount, method, phone, name):
-    user = get_user(u_id)
-    new_bal = float(user['balance']) - float(amount)
-    supabase.table("users").update({"balance": new_bal}).eq("user_id", u_id).execute()
-    res = supabase.table("requests").insert({
-        "user_id": u_id, 
-        "amount": amount, 
-        "status": "pending", 
-        "meta": {"phone": phone, "name": name, "method": method}
-    }).execute()
-    return res.data[0]['id']
-
-def get_history(u_id, category):
-    # Category can be used to filter wins vs transfers in your history table
-    res = supabase.table("history").select("*").eq("user_id", u_id).limit(10).execute()
-    return res.data
