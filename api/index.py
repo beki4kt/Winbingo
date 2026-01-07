@@ -18,7 +18,8 @@ async def call_api(method, payload):
     async with httpx.AsyncClient() as client:
         return await client.post(f"https://api.telegram.org/bot8555988777:AAEjZ3bIQSeazIxO2EAo8OwBIs8l_qJ_WRg/{method}", json=payload)
 
-@app.post("/webhook")
+@app.post("/api/webhook")  # Match the Telegram URL exactly
+@app.post("/webhook")      # Backup for local testing
 async def handle_webhook(request: Request):
     try:
         update = await request.json()
