@@ -1,0 +1,7 @@
+node_modules
+dist
+.git
+.fly
+Dockerfile
+nginx.conf
+fly.toml
