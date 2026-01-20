@@ -39,7 +39,6 @@ let globalGame: GameState = {
   nextCallTime: Date.now() + 5000
 };
 
-// Game Loop
 setInterval(() => {
   if (globalGame.status === 'running') {
     if (globalGame.calledNumbers.length >= 75) {
@@ -89,7 +88,7 @@ async function getOrCreateUser(ctx: Context) {
 
 // --- KEYBOARDS ---
 
-// 1. The Main Dashboard (Matches "inl.jpg" - Inline Buttons)
+// 1. The Main Dashboard (Inline Buttons)
 const dashboardMenu = Markup.inlineKeyboard([
   [Markup.button.webApp('Play / ይጫወቱ 🎮', appUrl), Markup.button.callback('Register / ይመዝገቡ 📝', 'register_check')],
   [Markup.button.callback('Check Balance / ሂሳብ 💰', 'balance'), Markup.button.callback('Deposit / ገቢ 💵', 'deposit')],
@@ -100,29 +99,26 @@ const dashboardMenu = Markup.inlineKeyboard([
 
 // 2. Registration Request (Persistent Keyboard)
 const requestContactMenu = Markup.keyboard([
-  [Markup.button.contactRequest('📱 Register / ይመዝገቡ')]
+  [Markup.button.contactRequest('📱 Share Contact / ስልክ ቁጥር ያጋሩ')]
 ]).resize().oneTime();
 
 
-// --- COMMANDS CONFIGURATION (Matches "menuw.jpg") ---
-bot.telegram.setMyCommands([
+// --- COMMANDS CONFIGURATION ---
+const commands = [
   { command: 'start', description: 'Start the bot / መጀመሪያ' },
+  { command: 'menu', description: 'Open Menu / ምናሌ' },
   { command: 'register', description: 'Register account / ይመዝገቡ' },
   { command: 'play', description: 'Play Bingo / ይጫወቱ' },
-  { command: 'deposit', description: 'Deposit money / ገቢ' },
   { command: 'balance', description: 'Check balance / ቀሪ ሂሳብ' },
+  { command: 'deposit', description: 'Deposit money / ገቢ' },
   { command: 'withdraw', description: 'Withdraw money / ወጪ' },
   { command: 'transfer', description: 'Send money / ያስተላልፉ' },
-  { command: 'convert', description: 'Convert coins / ይቀይሩ' },
-  { command: 'invite', description: 'Invite friends / ይጋብዙ' },
   { command: 'instruction', description: 'How to play / መመሪያ' },
   { command: 'support', description: 'Contact support / እርዳታ' }
-]);
-
+];
 
 // --- BOT HANDLERS ---
 
-// 1. START COMMAND
 bot.start(async (ctx) => {
   const user = await getOrCreateUser(ctx);
   
@@ -141,32 +137,28 @@ bot.start(async (ctx) => {
   sendDashboard(ctx);
 });
 
-// 2. CONTACT HANDLER (Registration Logic)
+// CONTACT HANDLER
 bot.on('contact', async (ctx) => {
   const user = await getOrCreateUser(ctx);
   
   if (user && !user.isRegistered && ctx.message.contact.user_id === ctx.from.id) {
-    // Save to DB
     await prisma.user.update({
       where: { telegramId: user.telegramId },
       data: { isRegistered: true, phoneNumber: ctx.message.contact.phone_number }
     });
 
-    // Reply Success & Remove Keyboard (so the blue Menu button is visible)
+    // Remove the "Share Contact" keyboard explicitly
     await ctx.reply(
       "✅ **Registration Successful! / ምዝገባው ተሳክቷል!**\n\nYou can now play and deposit.\nአሁን መጫወት እና ገቢ ማድረግ ይችላሉ።", 
       { parse_mode: 'Markdown', ...Markup.removeKeyboard() }
     );
 
-    // Show the Main Menu
     sendDashboard(ctx);
-
   } else {
-    ctx.reply("❌ **Error / ስህተት**\nPlease share your own contact using the button below.\nእባክዎ የራስዎን ስልክ ቁጥር ያጋሩ።", requestContactMenu);
+    ctx.reply("❌ **Error / ስህተት**\nPlease share your own contact.\nእባክዎ የራስዎን ስልክ ቁጥር ያጋሩ።", requestContactMenu);
   }
 });
 
-// Helper to send the Image + Inline Menu
 async function sendDashboard(ctx: any) {
   try {
     await ctx.replyWithPhoto(
@@ -178,12 +170,12 @@ async function sendDashboard(ctx: any) {
       }
     );
   } catch (e) {
-    console.log("Image load failed, sending text only.");
     ctx.reply("🏆 **Win Bingo Main Menu**", dashboardMenu);
   }
 }
 
-// 3. COMMAND HANDLERS
+// COMMAND HANDLERS
+bot.command('menu', (ctx) => sendDashboard(ctx));
 bot.command('register', (ctx) => ctx.reply("ℹ️ You are already registered!\nተመዝግበዋል።", dashboardMenu));
 bot.command('play', (ctx) => ctx.reply("🎮 Click below to play:", Markup.inlineKeyboard([Markup.button.webApp('Play Now / ይጫወቱ', appUrl)])));
 
@@ -195,10 +187,8 @@ bot.command('balance', async (ctx) => {
 bot.command('transfer', async (ctx) => {
   const parts = ctx.message.text.split(' ');
   if (parts.length !== 3) return ctx.reply("⚠️ Usage: `/transfer 100 @username`");
-  
   const amount = parseFloat(parts[1]);
   const targetUsername = parts[2].replace('@', '');
-  
   if (isNaN(amount) || amount <= 0) return ctx.reply("❌ Invalid amount.");
   
   const sender = await getOrCreateUser(ctx);
@@ -216,21 +206,18 @@ bot.command('transfer', async (ctx) => {
   bot.telegram.sendMessage(receiver.telegramId.toString(), `💰 You received ${amount} ETB from @${sender.username}!`).catch(()=>{});
 });
 
-// 4. BUTTON ACTIONS
 bot.action('register_check', (ctx) => ctx.reply("✅ You are registered. / ተመዝግበዋል።"));
 bot.action('balance', async (ctx) => {
   if(!ctx.from) return;
   const user = await prisma.user.findUnique({ where: { telegramId: BigInt(ctx.from.id) } });
   ctx.reply(`💰 Balance: ${user?.balance.toFixed(2)} ETB`);
 });
-bot.action('instruction', (ctx) => ctx.reply("📖 **How to Play / መመሪያ**\n\nMatch 5 numbers in a row, column, or diagonal.\nአምስት ቁጥሮችን በተርታ፣ በአምድ ወይም በዲያግናል ያገናኙ!", {parse_mode: 'Markdown'}));
+bot.action('instruction', (ctx) => ctx.reply("📖 **How to Play / መመሪያ**\n\nMatch 5 numbers in a row, column, or diagonal.\nአምስት ቁጥሮችን በተርታ፣ በአምድ ወይም በዲያግናል ያገናኙ!"));
 bot.action('support', (ctx) => ctx.reply("📞 Support: @YourAdminHandle"));
 bot.action(['deposit', 'withdraw', 'invite'], (ctx) => ctx.reply("ℹ️ Contact admin for this feature.\nለዚህ አገልግሎት አድሚኑን ያናግሩ።"));
 bot.action('transfer_help', (ctx) => ctx.reply("To transfer: /transfer <amount> <username>"));
 
-// Error Handling
 bot.catch((err) => console.log('Bot Error:', err));
-
 
 // --- SERVER & API ---
 const distPath = path.join(__dirname, '../dist');
@@ -250,7 +237,16 @@ app.get('*', (req, res) => res.sendFile(path.join(distPath, 'index.html')));
 
 app.listen(port, () => {
     console.log(`✅ Server running on ${port}`);
-    if (botToken) bot.launch().then(() => console.log("🤖 Bot Launched")).catch(e => console.error("Bot failed:", e));
+    if (botToken) {
+      // 1. Set commands
+      bot.telegram.setMyCommands(commands);
+      
+      // 2. CRITICAL FIX: Force the blue button to be "Commands" menu, NOT "Play Web App"
+      // This overwrites any previous setting that stuck on the bot
+      bot.telegram.setChatMenuButton({ menuButton: { type: 'commands' } });
+      
+      bot.launch().then(() => console.log("🤖 Bot Launched")).catch(e => console.error("Bot failed:", e));
+    }
 });
 
 process.once('SIGINT', () => { bot.stop(); prisma.$disconnect(); });
