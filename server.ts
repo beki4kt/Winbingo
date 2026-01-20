@@ -35,7 +35,6 @@ const mainMenu = Markup.inlineKeyboard([
 // 3. Handle Commands
 bot.start(async (ctx) => {
   try {
-    // We use a reliable static image from Telegram itself, or just text if it fails
     await ctx.replyWithPhoto(
       'https://telegram.org/img/t_logo.png', 
       {
@@ -44,7 +43,6 @@ bot.start(async (ctx) => {
       }
     );
   } catch (e) {
-    // Fallback to text if image fails
     console.error("Failed to send image, sending text instead.");
     await ctx.reply('👋 Welcome to Win Bingo!\n\nChoose an option below to get started.', mainMenu);
   }
@@ -72,28 +70,28 @@ bot.action('instruction', (ctx) => ctx.reply('📖 How to play: Match 5 numbers 
 bot.action('withdraw', (ctx) => ctx.reply('🏦 Withdrawals are processed within 24 hours.'));
 bot.action('invite', (ctx) => ctx.reply('🔗 Share this link to invite friends: https://t.me/YourBotName?start=ref123'));
 
-// 5. GLOBAL ERROR HANDLING (CRITICAL FIX)
-// This prevents the server from crashing if Telegram has a network hiccup
+// 5. Global Error Handling
 bot.catch((err: any, ctx) => {
   console.log(`⚠️ Ooops, encountered an error for ${ctx.updateType}`, err);
 });
 
-// Launch the bot
 if (botToken) {
   bot.launch().then(() => console.log('🤖 Bot is running!'));
 }
 
-// 6. Serve the React Frontend
-app.use(express.static(path.join(__dirname, 'dist')));
+// 6. Serve the React Frontend (CORRECTED PATH)
+// We use '../dist' because the server code runs from inside 'dist-server'
+const distPath = path.join(__dirname, '../dist');
+
+app.use(express.static(distPath));
 
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+  res.sendFile(path.join(distPath, 'index.html'));
 });
 
 app.listen(port, () => {
   console.log(`🚀 Server running on port ${port}`);
 });
 
-// Enable graceful stop
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
