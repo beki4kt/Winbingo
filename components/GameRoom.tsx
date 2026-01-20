@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { generateFairBoard, checkBingoWin } from '../utils';
+// FIX 1: Add '.js' extension to satisfy NodeNext module resolution
+import { generateFairBoard, checkBingoWin } from '../utils.js';
 
 interface GameRoomProps {
   onLeave: () => void;
@@ -113,7 +114,8 @@ const GameRoom: React.FC<GameRoomProps> = ({ onLeave, boardNumber, stake, balanc
                  {letters.map((l, i) => <div key={i} className={`${colors[i]} text-white text-[10px] font-black text-center rounded py-0.5`}>{l}</div>)}
               </div>
               <div className="grid grid-cols-5 gap-1.5 w-full aspect-square">
-                {cardMatrix.map((row, rIdx) => row.map((val, cIdx) => {
+                {/* FIX 2: Explicitly type the map parameters to fix implicit 'any' error */}
+                {cardMatrix.map((row: (string | number)[], rIdx: number) => row.map((val: string | number, cIdx: number) => {
                   const isMarked = markedNumbers.includes(val as any);
                   const isTrulyCalled = val === '*' || calledNumbers.includes(val as number);
                   
