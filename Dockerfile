@@ -1,6 +1,9 @@
 # Use Node image
 FROM node:20-alpine
 
+# 1. INSTALL OPENSSL (Required for Prisma on Alpine Linux)
+RUN apk -U add --no-cache openssl
+
 # Set working directory
 WORKDIR /app
 
@@ -10,21 +13,18 @@ COPY package*.json ./
 # Install dependencies
 RUN npm install
 
-# Copy source code (including prisma folder and tsconfig files)
+# Copy source code
 COPY . .
 
-# -----------------------------------------------------------
-# ✅ CRITICAL FIX: Generate Prisma Client BEFORE building
-# This creates the types needed for server.ts to compile
-# -----------------------------------------------------------
-RUN npx prisma generate
+# 2. GENERATE PRISMA CLIENT
+# We explicitly point to the schema location to be safe
+RUN npx prisma generate --schema ./prisma/schema.prisma
 
-# Build Frontend (Vite) and Backend (TypeScript)
+# Build the project
 RUN npm run build
 
-# Expose the port Fly.io uses
+# Expose port
 EXPOSE 8080
 
-# Start the server
-# We run migrate deploy to ensure the database file is created/updated on startup
+# Start server
 CMD npx prisma migrate deploy && node dist-server/server.js
