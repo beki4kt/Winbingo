@@ -88,7 +88,6 @@ async function getOrCreateUser(ctx: Context) {
 
 // --- KEYBOARDS ---
 
-// 1. The Main Dashboard (Inline Buttons)
 const dashboardMenu = Markup.inlineKeyboard([
   [Markup.button.webApp('Play / ይጫወቱ 🎮', appUrl), Markup.button.callback('Register / ይመዝገቡ 📝', 'register_check')],
   [Markup.button.callback('Check Balance / ሂሳብ 💰', 'balance'), Markup.button.callback('Deposit / ገቢ 💵', 'deposit')],
@@ -97,13 +96,10 @@ const dashboardMenu = Markup.inlineKeyboard([
   [Markup.button.callback('Invite / ይጋብዙ 🔗', 'invite')]
 ]);
 
-// 2. Registration Request (Persistent Keyboard)
 const requestContactMenu = Markup.keyboard([
   [Markup.button.contactRequest('📱 Share Contact / ስልክ ቁጥር ያጋሩ')]
 ]).resize().oneTime();
 
-
-// --- COMMANDS CONFIGURATION ---
 const commands = [
   { command: 'start', description: 'Start the bot / መጀመሪያ' },
   { command: 'menu', description: 'Open Menu / ምናሌ' },
@@ -120,6 +116,17 @@ const commands = [
 // --- BOT HANDLERS ---
 
 bot.start(async (ctx) => {
+  // -------------------------------------------------------------
+  // 🚨 CRITICAL FIX: FORCE THE MENU BUTTON TO UPDATE FOR THIS USER
+  // This overrides any cached "Web App" button settings
+  // -------------------------------------------------------------
+  try {
+    await ctx.setChatMenuButton({ type: 'commands' });
+  } catch (e) {
+    console.error("Failed to reset menu button", e);
+  }
+  // -------------------------------------------------------------
+
   const user = await getOrCreateUser(ctx);
   
   // A. NOT REGISTERED? -> Force Registration
@@ -137,8 +144,10 @@ bot.start(async (ctx) => {
   sendDashboard(ctx);
 });
 
-// CONTACT HANDLER
 bot.on('contact', async (ctx) => {
+  // FORCE RESET MENU BUTTON HERE TOO
+  try { await ctx.setChatMenuButton({ type: 'commands' }); } catch (e) {}
+
   const user = await getOrCreateUser(ctx);
   
   if (user && !user.isRegistered && ctx.message.contact.user_id === ctx.from.id) {
@@ -147,7 +156,6 @@ bot.on('contact', async (ctx) => {
       data: { isRegistered: true, phoneNumber: ctx.message.contact.phone_number }
     });
 
-    // Remove the "Share Contact" keyboard explicitly
     await ctx.reply(
       "✅ **Registration Successful! / ምዝገባው ተሳክቷል!**\n\nYou can now play and deposit.\nአሁን መጫወት እና ገቢ ማድረግ ይችላሉ።", 
       { parse_mode: 'Markdown', ...Markup.removeKeyboard() }
@@ -174,7 +182,7 @@ async function sendDashboard(ctx: any) {
   }
 }
 
-// COMMAND HANDLERS
+// COMMANDS
 bot.command('menu', (ctx) => sendDashboard(ctx));
 bot.command('register', (ctx) => ctx.reply("ℹ️ You are already registered!\nተመዝግበዋል።", dashboardMenu));
 bot.command('play', (ctx) => ctx.reply("🎮 Click below to play:", Markup.inlineKeyboard([Markup.button.webApp('Play Now / ይጫወቱ', appUrl)])));
@@ -219,10 +227,8 @@ bot.action('transfer_help', (ctx) => ctx.reply("To transfer: /transfer <amount> 
 
 bot.catch((err) => console.log('Bot Error:', err));
 
-// --- SERVER & API ---
 const distPath = path.join(__dirname, '../dist');
 app.use(express.static(distPath));
-
 app.get('/api/game/sync', (req, res) => res.json(globalGame));
 app.get('/api/user', async (req, res) => {
   const tid = req.query.id as string;
@@ -232,19 +238,12 @@ app.get('/api/user', async (req, res) => {
       user ? res.json({ ...user, telegramId: user.telegramId.toString() }) : res.status(404).json({ error: "Not found" });
   } catch (e) { res.status(500).json({ error: "Server Error" }); }
 });
-
 app.get('*', (req, res) => res.sendFile(path.join(distPath, 'index.html')));
 
 app.listen(port, () => {
     console.log(`✅ Server running on ${port}`);
     if (botToken) {
-      // 1. Set commands
       bot.telegram.setMyCommands(commands);
-      
-      // 2. CRITICAL FIX: Force the blue button to be "Commands" menu, NOT "Play Web App"
-      // This overwrites any previous setting that stuck on the bot
-      bot.telegram.setChatMenuButton({ menuButton: { type: 'commands' } });
-      
       bot.launch().then(() => console.log("🤖 Bot Launched")).catch(e => console.error("Bot failed:", e));
     }
 });
