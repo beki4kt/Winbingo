@@ -5,216 +5,266 @@ import path from 'path';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
-// 1. Import Prisma Client
 import { PrismaClient } from '@prisma/client';
+import cors from 'cors';
 
 dotenv.config();
 
-// Fix for paths in ES Modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+const rootPath = path.join(__dirname, '../'); // Path to find win.png in root
 
-// Calculate root path to find win.png later
-const rootPath = path.join(__dirname, '../');
-
-// 2. Initialize Database and Express
 const prisma = new PrismaClient();
 const app = express();
 const port = process.env.PORT || 8080;
 
-// Setup Telegram Bot
-const botToken = process.env.BOT_TOKEN;
-if (!botToken) throw new Error("BOT_TOKEN missing");
-const bot = new Telegraf(botToken);
+app.use(cors());
 
+// --- 🎮 MULTIPLAYER ENGINE ---
+// Defines the state of the single active game room
+interface GameState {
+  roomId: string;
+  calledNumbers: number[];
+  currentCall: number | null;
+  status: 'waiting' | 'running' | 'ended';
+  nextCallTime: number;
+}
+
+let globalGame: GameState = {
+  roomId: 'LIVE-1',
+  calledNumbers: [],
+  currentCall: null,
+  status: 'running',
+  nextCallTime: Date.now() + 5000
+};
+
+// Game Loop: Picks a number every 5 seconds
+setInterval(() => {
+  if (globalGame.status === 'running') {
+    if (globalGame.calledNumbers.length >= 75) {
+      // Restart Game Logic
+      globalGame.status = 'ended';
+      setTimeout(() => {
+        globalGame = {
+          roomId: 'LIVE-' + Math.floor(Math.random() * 1000),
+          calledNumbers: [],
+          currentCall: null,
+          status: 'running',
+          nextCallTime: Date.now() + 5000
+        };
+      }, 10000); // 10s break between games
+      return;
+    }
+
+    // Pick unique number
+    let nextNum;
+    do { nextNum = Math.floor(Math.random() * 75) + 1; } 
+    while (globalGame.calledNumbers.includes(nextNum));
+
+    globalGame.currentCall = nextNum;
+    globalGame.calledNumbers.push(nextNum);
+    globalGame.nextCallTime = Date.now() + 5000;
+  }
+}, 5000);
+
+// --- 🤖 BOT LOGIC ---
+const botToken = process.env.BOT_TOKEN;
+if (!botToken) console.warn("BOT_TOKEN is missing!");
+const bot = new Telegraf(botToken || 'YOUR_TOKEN');
 const appUrl = process.env.APP_URL || 'https://your-app.fly.dev';
 
-// --- HELPER: Get or Create User in DB ---
+// Database Helper
 async function getOrCreateUser(ctx: Context) {
   if (!ctx.from) return null;
   const telegramId = BigInt(ctx.from.id);
-
-  let user = await prisma.user.findUnique({ where: { telegramId } });
-
-  if (!user) {
-    user = await prisma.user.create({
-      data: {
-        telegramId,
-        username: ctx.from.username,
-        firstName: ctx.from.first_name,
-      }
-    });
-    console.log(`🆕 New user created: ${user.telegramId}`);
-  }
+  
+  // Upsert ensures we update the username if it changed
+  const user = await prisma.user.upsert({
+    where: { telegramId },
+    update: { 
+      username: ctx.from.username, 
+      firstName: ctx.from.first_name 
+    },
+    create: {
+      telegramId,
+      username: ctx.from.username,
+      firstName: ctx.from.first_name
+    }
+  });
   return user;
 }
 
-
-// --- KEYBOARDS ---
-// The main Inline Keyboard (sent with the image)
-const mainMenuInline = Markup.inlineKeyboard([
+// Menus
+const mainMenu = Markup.inlineKeyboard([
   [Markup.button.webApp('PLAY BINGO 🎮', appUrl)],
-  [Markup.button.callback('Deposit 💵', 'deposit_info'), Markup.button.callback('Withdraw 🏦', 'withdraw_info')],
-  [Markup.button.callback('Instructions 📖', 'instruction'), Markup.button.callback('Support 📞', 'support')]
+  [Markup.button.callback('Deposit 💵', 'deposit_manual'), Markup.button.callback('Withdraw 🏦', 'withdraw_manual')],
+  [Markup.button.callback('Transfer 💸', 'transfer_help')],
+  [Markup.button.callback('Support 📞', 'support'), Markup.button.callback('Rules 📖', 'rules')]
 ]);
 
-// The Contact Request Keyboard (for registration)
-const contactRequestKeyboard = Markup.keyboard([
-  [Markup.button.contactRequest('📱 Share Contact Number')]
+const registerKeyboard = Markup.keyboard([
+  [Markup.button.contactRequest('📱 Share Contact to Register')]
 ]).resize().oneTime();
 
 
-// --- BOT LOGIC ---
+// --- COMMANDS ---
 
-// 1. Set the Bottom-Left Menu Commands
 bot.telegram.setMyCommands([
-  { command: 'start', description: 'Open main menu' },
-  { command: 'play', description: 'Start the game' },
-  { command: 'register', description: 'Create account (One time)' },
-  { command: 'balance', description: 'Check wallet' },
-  { command: 'deposit', description: 'Add funds' },
-  { command: 'withdrawal', description: 'Cash out' },
-  { command: 'transfer', description: 'Send to friend' },
-  // { command: 'invite', description: 'Get invite link' }, // Keep menu short
+  { command: 'start', description: 'Open Main Menu' },
+  { command: 'play', description: 'Start Bingo App' },
+  { command: 'register', description: 'Create Account (One-Time)' },
+  { command: 'balance', description: 'Check Wallet' },
+  { command: 'transfer', description: 'Send Money' },
+  { command: 'deposit', description: 'Add Funds' },
+  { command: 'withdrawal', description: 'Cash Out' },
 ]);
 
-// 2. Handle /start (sends local image + inline menu)
+// 1. START (Image + Menu)
 bot.start(async (ctx) => {
-  await getOrCreateUser(ctx); // Ensure user exists in DB
+  await getOrCreateUser(ctx);
   try {
-    // Sending a LOCAL file using path.join to find it in root
-    await ctx.replyWithPhoto({ source: path.join(rootPath, 'win.png') }, {
-      caption: "👋 **Welcome to Win Bingo!**\n\nGet ready to play and win! Select an option below.",
-      parse_mode: 'Markdown',
-      ...mainMenuInline
-    });
-  } catch (error) {
-    console.error("Failed to load win.png locally:", error);
-    ctx.reply("👋 Welcome to Win Bingo! (Image failed to load)", mainMenuInline);
+    await ctx.replyWithPhoto(
+      { source: path.join(rootPath, 'win.png') }, 
+      {
+        caption: "👋 **Welcome to Win Bingo!**\n\nThe most trusted multiplayer bingo game.\nSelect an option below to start winning!",
+        parse_mode: 'Markdown',
+        ...mainMenu
+      }
+    );
+  } catch (e) {
+    console.error("Image load error:", e);
+    // Fallback if image fails
+    ctx.reply("👋 **Welcome to Win Bingo!**", { parse_mode: 'Markdown', ...mainMenu });
   }
 });
 
-// 3. Handle /play
+// 2. PLAY
 bot.command('play', (ctx) => {
-  // We can't open webapp directly from command, so we send a button
-  ctx.reply("Click below to start playing!", Markup.inlineKeyboard([
-     Markup.button.webApp('🚀 Launch Game', appUrl)
+  ctx.reply("🚀 **Ready to win?** Click below!", Markup.inlineKeyboard([
+    Markup.button.webApp('Open Bingo App 🎮', appUrl)
   ]));
 });
 
-// 4. Handle /register (The one-time contact logic)
+// 3. REGISTER (One-Time)
 bot.command('register', async (ctx) => {
   const user = await getOrCreateUser(ctx);
-  if (!user) return;
-
-  if (user.isRegistered) {
-    return ctx.reply("✅ You are already registered!");
+  if (user?.isRegistered) {
+    return ctx.reply("✅ **You are already registered!**\n\nGo to /play to start the game.", { parse_mode: 'Markdown' });
   }
-
-  await ctx.reply("To register, please click the button below to share your contact information so we can verify your account.", contactRequestKeyboard);
+  ctx.reply("👇 **Tap the button below** to verify your account with your contact number.", registerKeyboard);
 });
 
-// Handle receiving the contact
 bot.on('contact', async (ctx) => {
   const user = await getOrCreateUser(ctx);
-  if (!user) return;
-
-  // Security check: ensure the contact shared belongs to the sender
-  if (ctx.message.contact.user_id !== ctx.from.id) {
-     return ctx.reply("Please share your own contact.");
+  // Validation: Must be not registered, and contact must match sender
+  if (user && !user.isRegistered && ctx.message.contact.user_id === ctx.from.id) {
+    await prisma.user.update({
+      where: { telegramId: user.telegramId },
+      data: { isRegistered: true, phoneNumber: ctx.message.contact.phone_number }
+    });
+    ctx.reply("🎉 **Registration Complete!**\n\nYou can now use /deposit to add funds.", Markup.removeKeyboard());
+  } else {
+    ctx.reply("❌ **Registration Failed.** Please make sure you are sharing your own contact.", Markup.removeKeyboard());
   }
-
-  if (user.isRegistered) {
-     return ctx.reply("You are already registered!", Markup.removeKeyboard());
-  }
-
-  // Update DB marking them as registered
-  await prisma.user.update({
-    where: { telegramId: user.telegramId },
-    data: {
-      isRegistered: true,
-      phoneNumber: ctx.message.contact.phone_number
-    }
-  });
-
-  ctx.reply(`🎉 **Registration Successful!**\n\nWelcome, ${ctx.from.first_name}. You can now deposit and play.`,
-    { parse_mode: 'Markdown', ...Markup.removeKeyboard() } // Remove the contact button
-  );
 });
 
+// 4. DEPOSIT & WITHDRAWAL (Manual)
+bot.command(['deposit', 'withdrawal'], (ctx) => {
+  ctx.reply("ℹ️ **Manual Processing**\n\nPlease contact our agent at @YourAdminHandle to process this request.");
+});
+bot.action(['deposit_manual', 'withdraw_manual'], (ctx) => {
+    ctx.reply("ℹ️ Please contact @YourAdminHandle to process this transaction.");
+});
 
-// 5. Handle Database Commands (Balance)
+// 5. BALANCE (Database)
 bot.command('balance', async (ctx) => {
   const user = await getOrCreateUser(ctx);
-  if(!user) return;
-  // In the future, this balance will come from actual transactions
-  ctx.reply(`💰 **Your Wallet**\n\nCurrent Balance: **${user.balance.toFixed(2)} ETB**`, {parse_mode: 'Markdown'});
+  if (user) {
+    ctx.reply(`💰 **Your Wallet**\n\nBalance: **${user.balance.toFixed(2)} ETB**`, { parse_mode: 'Markdown' });
+  }
 });
 
-// 6. Handle Placeholder Commands (Manual processes for now)
-bot.command(['deposit', 'withdrawal', 'transfer'], (ctx) => {
-  const commandStr = ctx.message.text;
-  ctx.reply(`⚙️ The ${commandStr} feature is currently handled manually.\n\nPlease contact /support for assistance.`);
+// 6. TRANSFER (Database Logic)
+bot.command('transfer', async (ctx) => {
+  // Expected format: /transfer 50 @username
+  const parts = ctx.message.text.split(' ');
+  if (parts.length !== 3) {
+    return ctx.reply("⚠️ **Usage:** `/transfer <amount> @username`\nExample: `/transfer 100 @john_doe`", { parse_mode: 'Markdown' });
+  }
+
+  const amount = parseFloat(parts[1]);
+  const targetUsername = parts[2].replace('@', '');
+
+  if (isNaN(amount) || amount <= 0) return ctx.reply("❌ Invalid amount.");
+
+  const sender = await getOrCreateUser(ctx);
+  if (!sender || sender.balance < amount) return ctx.reply("❌ **Insufficient Balance.**");
+
+  // Find Receiver
+  const receiver = await prisma.user.findFirst({
+    where: { username: targetUsername }
+  });
+
+  if (!receiver) return ctx.reply("❌ User not found. Have they started the bot?");
+
+  // Transaction
+  try {
+    await prisma.$transaction([
+      prisma.user.update({
+        where: { id: sender.id },
+        data: { balance: { decrement: amount } }
+      }),
+      prisma.user.update({
+        where: { id: receiver.id },
+        data: { balance: { increment: amount } }
+      })
+    ]);
+    ctx.reply(`✅ **Transfer Successful!**\nSent ${amount} ETB to @${targetUsername}`, { parse_mode: 'Markdown' });
+    // Optional: Notify receiver if they have started the bot
+    bot.telegram.sendMessage(Number(receiver.telegramId), `💰 You received **${amount} ETB** from @${sender.username || 'Unknown'}!`, { parse_mode: 'Markdown' }).catch(() => {});
+  } catch (e) {
+    ctx.reply("❌ Transaction failed. Please try again.");
+    console.error(e);
+  }
 });
 
-
-// 7. Handle Inline Button Actions & Other commands
-bot.action('instruction', (ctx) => ctx.reply('📖 **How to Play:**\nGet 5 in a row horizontally, vertically, or diagonally to win BINGO!', {parse_mode: 'Markdown'}));
-bot.command('support', (ctx) => ctx.reply('📞 Need help? Contact our support team at @YourSupportUsername'));
-bot.action('support', (ctx) => ctx.reply('📞 Need help? Contact our support team at @YourSupportUsername'));
-
-bot.action(['deposit_info', 'withdraw_info'], (ctx) => {
-   ctx.reply("Please use the bot menu commands /deposit or /withdrawal for these actions.");
-})
+bot.action('transfer_help', (ctx) => ctx.reply("To transfer funds, type:\n\n/transfer [amount] [@username]"));
+bot.action('rules', (ctx) => ctx.reply("📖 Match 5 numbers in a row, column, or diagonal to win!"));
+bot.action('support', (ctx) => ctx.reply("📞 Contact Support: @YourAdminHandle"));
 
 
-// Global Error Handler
-bot.catch((err, ctx) => {
-  console.log(`Oops, encountered an error for ${ctx.updateType}`, err);
-});
+bot.catch((err) => console.log('Bot Error:', err));
+if (botToken) bot.launch();
 
 
-// --- SERVER SETUP ---
+// --- API FOR FRONTEND ---
 const distPath = path.join(__dirname, '../dist');
 app.use(express.static(distPath));
 
-// API endpoint to get user data for the Mini App (Frontend)
-// The frontend will call this to know who is playing
+// Sync Endpoint for Multiplayer
+app.get('/api/game/sync', (req, res) => res.json(globalGame));
+
+// User Info Endpoint
 app.get('/api/user', async (req, res) => {
-    const telegramIdStr = req.query.id as string;
-    if (!telegramIdStr) return res.status(400).json({ error: "Missing ID" });
-
-    try {
-        // BigInt handling for Prisma lookup
-        const user = await prisma.user.findUnique({
-            where: { telegramId: BigInt(telegramIdStr) }
-        });
-
-        if (user) {
-            // Convert BigInt to string before sending back to frontend (JSON doesn't like BigInt)
-            res.json({ ...user, telegramId: user.telegramId.toString() });
-        } else {
-            res.status(404).json({ error: "User not found" });
-        }
-    } catch (e) {
-        console.error(e);
-        res.status(500).json({ error: "Internal server error" });
-    }
+  const tid = req.query.id as string;
+  if (!tid) return res.status(400).json({ error: "No ID" });
+  
+  // Use Prisma to find user
+  const user = await prisma.user.findUnique({ where: { telegramId: BigInt(tid) } });
+  
+  if (user) {
+    res.json({ 
+        ...user, 
+        telegramId: user.telegramId.toString() // Convert BigInt to string for JSON
+    });
+  } else {
+    res.status(404).json({ error: "Not found" });
+  }
 });
 
+app.get('*', (req, res) => res.sendFile(path.join(distPath, 'index.html')));
 
-app.get('*', (req, res) => {
-  res.sendFile(path.join(distPath, 'index.html'));
-});
+app.listen(port, () => console.log(`🚀 Server running on ${port}`));
 
-// Start bot and server together
-if (botToken) {
-  bot.launch().then(() => {
-    console.log('🤖 Bot Started');
-    app.listen(port, () => console.log(`🚀 Server running on port ${port}`));
-  });
-}
-
-// Graceful shutdown for Prisma and Bot
-process.once('SIGINT', async () => { bot.stop('SIGINT'); await prisma.$disconnect(); });
-process.once('SIGTERM', async () => { bot.stop('SIGTERM'); await prisma.$disconnect(); });
+process.once('SIGINT', () => { bot.stop(); prisma.$disconnect(); });
+process.once('SIGTERM', () => { bot.stop(); prisma.$disconnect(); });
