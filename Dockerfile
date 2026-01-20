@@ -1,23 +1,21 @@
-# Use Node image
 FROM node:20-alpine
 
-# Set working directory
 WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
+# Install dependencies (including devDependencies to run tsc)
 RUN npm install
 
-# Copy source code
+# Copy all source code
 COPY . .
 
-# Build the React frontend
-RUN npm run build
+# Build Frontend AND Backend
+# This runs the "build" script from package.json
+RUN npm run build 
 
-# Expose the port Fly.io uses (usually 8080)
 EXPOSE 8080
 
-# Start the server (using ts-node for simplicity, or node if you compiled it)
-CMD ["npx", "ts-node", "server.ts"]
+# Start the compiled server
+CMD ["node", "dist-server/server.js"]
