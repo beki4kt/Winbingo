@@ -3,9 +3,12 @@ import express from 'express';
 import { Telegraf, Markup } from 'telegraf';
 import path from 'path';
 import dotenv from 'dotenv';
+import { fileURLToPath } from 'url'; // <--- Add this
+import { dirname } from 'path';      // <--- Add this
 
 dotenv.config();
-
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 const app = express();
 const port = process.env.PORT || 8080;
 
