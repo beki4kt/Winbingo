@@ -3,12 +3,15 @@ import express from 'express';
 import { Telegraf, Markup } from 'telegraf';
 import path from 'path';
 import dotenv from 'dotenv';
-import { fileURLToPath } from 'url'; // <--- Add this
-import { dirname } from 'path';      // <--- Add this
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
 
 dotenv.config();
+
+// Fix for __dirname in ES Modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
 const app = express();
 const port = process.env.PORT || 8080;
 
@@ -20,7 +23,7 @@ if (!botToken) {
 
 const bot = new Telegraf(botToken || 'YOUR_BOT_TOKEN_HERE');
 
-// 2. Define the Bot Menu Logic (Matches your Images)
+// 2. Define the Bot Menu Logic
 const mainMenu = Markup.inlineKeyboard([
   [Markup.button.webApp('Play 🎮', process.env.APP_URL || 'https://your-app.fly.dev'), Markup.button.callback('Register 📝', 'register')],
   [Markup.button.callback('Check Balance 💰', 'balance'), Markup.button.callback('Deposit 💵', 'deposit')],
@@ -30,30 +33,37 @@ const mainMenu = Markup.inlineKeyboard([
 ]);
 
 // 3. Handle Commands
-bot.start((ctx) => {
-  ctx.replyWithPhoto(
-    { url: 'https://via.placeholder.com/600x400.png?text=Win+Bingo' }, // Replace with your actual banner image URL
-    {
-      caption: '👋 Welcome to Win Bingo!\n\nChoose an option below to get started.',
-      ...mainMenu
-    }
-  );
-  
-  // Set the "Menu" button (The bottom left menu in your screenshot)
-  bot.telegram.setMyCommands([
-    { command: 'start', description: 'Start the bot' },
-    { command: 'register', description: 'Register account' },
-    { command: 'play', description: 'Play Bingo game' },
-    { command: 'deposit', description: 'Deposit money' },
-    { command: 'balance', description: 'Check your balance' },
-    { command: 'withdraw', description: 'Withdraw money' },
-    { command: 'transfer', description: 'Send money to others' },
-    { command: 'invite', description: 'Invite friends' },
-    { command: 'support', description: 'Contact support' },
-  ]);
+bot.start(async (ctx) => {
+  try {
+    // We use a reliable static image from Telegram itself, or just text if it fails
+    await ctx.replyWithPhoto(
+      'https://telegram.org/img/t_logo.png', 
+      {
+        caption: '👋 Welcome to Win Bingo!\n\nChoose an option below to get started.',
+        ...mainMenu
+      }
+    );
+  } catch (e) {
+    // Fallback to text if image fails
+    console.error("Failed to send image, sending text instead.");
+    await ctx.reply('👋 Welcome to Win Bingo!\n\nChoose an option below to get started.', mainMenu);
+  }
+
+  // Set the "Menu" button
+  try {
+    await bot.telegram.setMyCommands([
+      { command: 'start', description: 'Start the bot' },
+      { command: 'play', description: 'Play Bingo game' },
+      { command: 'deposit', description: 'Deposit money' },
+      { command: 'balance', description: 'Check your balance' },
+      { command: 'support', description: 'Contact support' },
+    ]);
+  } catch (err) {
+    console.warn("Could not set commands (likely network issue), skipping.");
+  }
 });
 
-// 4. Handle Button Actions (Backend Logic Placeholders)
+// 4. Handle Button Actions
 bot.action('register', (ctx) => ctx.reply('📝 Registration feature coming soon!'));
 bot.action('balance', (ctx) => ctx.reply('💰 Your current balance is 0.00 ETB.'));
 bot.action('deposit', (ctx) => ctx.reply('💵 Deposit methods: Telebirr, Chapa.'));
@@ -62,16 +72,20 @@ bot.action('instruction', (ctx) => ctx.reply('📖 How to play: Match 5 numbers 
 bot.action('withdraw', (ctx) => ctx.reply('🏦 Withdrawals are processed within 24 hours.'));
 bot.action('invite', (ctx) => ctx.reply('🔗 Share this link to invite friends: https://t.me/YourBotName?start=ref123'));
 
-// Launch the bot (Polling mode is easiest for Fly.io single instance)
+// 5. GLOBAL ERROR HANDLING (CRITICAL FIX)
+// This prevents the server from crashing if Telegram has a network hiccup
+bot.catch((err: any, ctx) => {
+  console.log(`⚠️ Ooops, encountered an error for ${ctx.updateType}`, err);
+});
+
+// Launch the bot
 if (botToken) {
   bot.launch().then(() => console.log('🤖 Bot is running!'));
 }
 
-// 5. Serve the React Frontend
-// This tells Express to serve the "dist" folder where Vite builds your app
+// 6. Serve the React Frontend
 app.use(express.static(path.join(__dirname, 'dist')));
 
-// Handle all other routes by serving index.html (SPA support)
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
