@@ -18,4 +18,10 @@ RUN npm run build
 EXPOSE 8080
 
 # Start the compiled server
-CMD ["node", "dist-server/server.js"]
+EXPOSE 8080
+
+# ---- CHANGE THE CMD LINE TO THIS ----
+# 1. Generate Prisma Client code
+# 2. Run migrations to create/update DB tables
+# 3. Start server
+CMD npx prisma generate && npx prisma migrate deploy && node dist-server/server.js

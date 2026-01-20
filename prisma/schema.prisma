@@ -1,0 +1,23 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Define what a "User" is in our system
+model User {
+  id           Int      @id @default(autoincrement())
+  telegramId   BigInt   @unique
+  username     String?
+  firstName    String?
+  isRegistered Boolean  @default(false)
+  phoneNumber  String?
+  balance      Float    @default(0.00)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
