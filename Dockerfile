@@ -1,15 +1,23 @@
-# Stage 1: Build the React application
-FROM node:20-slim AS build
+# Use Node image
+FROM node:20-alpine
+
+# Set working directory
 WORKDIR /app
-COPY package.json ./
+
+# Copy package files
+COPY package*.json ./
+
+# Install dependencies
 RUN npm install
+
+# Copy source code
 COPY . .
+
+# Build the React frontend
 RUN npm run build
 
-# Stage 2: Serve the static files with Nginx
-FROM nginx:alpine
-COPY --from=build /app/dist /usr/share/nginx/html
-# Fly.io needs a custom Nginx config to handle React Router (if used)
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Expose the port Fly.io uses (usually 8080)
 EXPOSE 8080
-CMD ["nginx", "-g", "daemon off;"]
+
+# Start the server (using ts-node for simplicity, or node if you compiled it)
+CMD ["npx", "ts-node", "server.ts"]
