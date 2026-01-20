@@ -1,27 +1,30 @@
+# Use Node image
 FROM node:20-alpine
 
+# Set working directory
 WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies (including devDependencies to run tsc)
+# Install dependencies
 RUN npm install
 
-# Copy all source code
+# Copy source code (including prisma folder and tsconfig files)
 COPY . .
 
-# Build Frontend AND Backend
-# This runs the "build" script from package.json
-RUN npm run build 
+# -----------------------------------------------------------
+# ✅ CRITICAL FIX: Generate Prisma Client BEFORE building
+# This creates the types needed for server.ts to compile
+# -----------------------------------------------------------
+RUN npx prisma generate
 
+# Build Frontend (Vite) and Backend (TypeScript)
+RUN npm run build
+
+# Expose the port Fly.io uses
 EXPOSE 8080
 
-# Start the compiled server
-EXPOSE 8080
-
-# ---- CHANGE THE CMD LINE TO THIS ----
-# 1. Generate Prisma Client code
-# 2. Run migrations to create/update DB tables
-# 3. Start server
-CMD npx prisma generate && npx prisma migrate deploy && node dist-server/server.js
+# Start the server
+# We run migrate deploy to ensure the database file is created/updated on startup
+CMD npx prisma migrate deploy && node dist-server/server.js
