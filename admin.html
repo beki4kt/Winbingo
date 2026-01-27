@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WinBingo Admin</title>
+    <style>
+        body { font-family: sans-serif; background: #f4f4f9; padding: 20px; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        h1 { color: #333; border-bottom: 2px solid #eee; padding-bottom: 10px; }
+        .card { border: 1px solid #ddd; padding: 15px; margin-bottom: 15px; border-radius: 6px; display: flex; justify-content: space-between; align-items: center; }
+        .card.deposit { border-left: 5px solid green; }
+        .card.withdraw { border-left: 5px solid red; }
+        .info h3 { margin: 0 0 5px 0; font-size: 1.1em; }
+        .info p { margin: 2px 0; color: #666; font-size: 0.9em; }
+        .actions button { padding: 8px 15px; border: none; border-radius: 4px; cursor: pointer; color: white; margin-left: 5px; }
+        .btn-approve { background: #28a745; }
+        .btn-reject { background: #dc3545; }
+        .badge { background: #eee; padding: 2px 6px; border-radius: 4px; font-size: 0.8em; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Admin Dashboard 🛡️</h1>
+        <div id="loading">Loading requests...</div>
+        <div id="list"></div>
+    </div>
+
+    <script>
+        const AUTH_KEY = 'admin123'; // Hardcoded for simplicity
+
+        async function loadData() {
+            const res = await fetch(`/api/admin/transactions?auth=${AUTH_KEY}`);
+            if(res.status === 403) return alert("Auth Failed");
+            const data = await res.json();
+            render(data);
+        }
+
+        async function takeAction(id, action) {
+            if(!confirm(`Are you sure you want to ${action}?`)) return;
+            
+            await fetch('/api/admin/action', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ auth: AUTH_KEY, id, action })
+            });
+            loadData(); // Refresh
+        }
+
+        function render(items) {
+            const list = document.getElementById('list');
+            document.getElementById('loading').style.display = 'none';
+            list.innerHTML = '';
+
+            if (items.length === 0) {
+                list.innerHTML = '<p style="text-align:center; color:#999;">No pending requests.</p>';
+                return;
+            }
+
+            items.forEach(item => {
+                const isDep = item.type === 'DEPOSIT';
+                const div = document.createElement('div');
+                div.className = `card ${isDep ? 'deposit' : 'withdraw'}`;
+                
+                div.innerHTML = `
+                    <div class="info">
+                        <h3>${isDep ? '💵 Deposit' : '🏦 Withdraw'} - ${item.amount} ETB</h3>
+                        <p>User: @${item.username} (ID: ${item.userId})</p>
+                        ${isDep ? `<p><strong>SMS/Ref:</strong> ${item.sms || item.ref}</p>` 
+                                : `<p><strong>Phone:</strong> ${item.phone}</p>`}
+                        <p class="badge">${new Date(item.date).toLocaleString()}</p>
+                    </div>
+                    <div class="actions">
+                        <button class="btn-approve" onclick="takeAction('${item.id}', 'APPROVE')">Approve</button>
+                        <button class="btn-reject" onclick="takeAction('${item.id}', 'REJECT')">Reject</button>
+                    </div>
+                `;
+                list.appendChild(div);
+            });
+        }
+
+        // Load initially and refresh every 10 seconds
+        loadData();
+        setInterval(loadData, 10000);
+    </script>
+</body>
+</html>s
