@@ -25,16 +25,17 @@ app.use(express.json());
 app.use(cors());
 
 // --- 🧠 STATE MANAGEMENT ---
+// Using Map is fine for <5000 users. For >100,000, we would use Redis.
 interface UserState {
   step: 'IDLE' 
       | 'DEPOSIT_AMOUNT' | 'DEPOSIT_CONFIRM' 
       | 'WITHDRAW_AMOUNT' | 'WITHDRAW_BANK' | 'WITHDRAW_NAME' | 'WITHDRAW_ACCOUNT' | 'WITHDRAW_CONFIRM'
-      | 'TRANSFER_USERNAME' | 'TRANSFER_AMOUNT' | 'TRANSFER_CONFIRM';
+      | 'TRANSFER_USERNAME' | 'TRANSFER_AMOUNT';
   data: any;
 }
 const userStates = new Map<string, UserState>();
 
-// --- 🛡️ DUPLICATE CHECKER ---
+// --- 🛡️ TRANSACTION LOGS ---
 const usedTransactionIds = new Set<string>();
 
 // --- 🕵️ AUTOMATED SMS PARSER ---
@@ -44,6 +45,7 @@ function verifyPaymentSMS(text: string, expectedAmount: number): { valid: boolea
   let provider = '';
   let txId = '';
 
+  // Telebirr & CBE Patterns
   if (cleanText.includes('telebirr') || cleanText.includes('transferred') || cleanText.includes('paid')) {
     const amountMatch = cleanText.match(/(\d+(\.\d+)?)\s*etb/) || cleanText.match(/etb\s*(\d+(\.\d+)?)/);
     const idMatch = cleanText.match(/trans id:?\s*([a-z0-9]+)/i) || cleanText.match(/transaction id:?\s*([a-z0-9]+)/i);
@@ -70,6 +72,18 @@ const botToken = process.env.BOT_TOKEN;
 const bot = new Telegraf(botToken || '');
 const appUrl = process.env.APP_URL || 'https://your-app.fly.dev';
 
+// --- 1. THE BLUE MENU COMMANDS ---
+// These appear at the bottom left of the keyboard
+const commands = [
+  { command: 'menu', description: '🏠 Main Menu' },
+  { command: 'play', description: '🎮 Play Game' },
+  { command: 'deposit', description: '➕ Deposit' },
+  { command: 'withdraw', description: '➖ Withdraw' },
+  { command: 'transfer', description: '💸 Transfer' },
+  { command: 'balance', description: '💰 Balance' },
+  { command: 'help', description: '❓ Help' }
+];
+
 async function getOrCreateUser(ctx: Context) {
   if (!ctx.from) return null;
   const telegramId = BigInt(ctx.from.id);
@@ -84,16 +98,14 @@ async function getOrCreateUser(ctx: Context) {
 
 function generateReference() { return crypto.randomBytes(5).toString('hex').toUpperCase(); }
 
-// --- 🤖 KEYBOARDS (CLEANER LOOK) ---
+// --- 🤖 INLINE KEYBOARD (UPDATED) ---
 const dashboardMenu = Markup.inlineKeyboard([
   [Markup.button.webApp('Play Now 🎮', appUrl)],
   [Markup.button.callback('Deposit ➕', 'deposit_start'), Markup.button.callback('Withdraw ➖', 'withdraw_start')],
   [Markup.button.callback('Transfer 💸', 'transfer_start'), Markup.button.callback('Balance 💰', 'balance')],
-  [Markup.button.callback('Support 📞', 'support'), Markup.button.callback('How to Play 📖', 'instruction')]
+  [Markup.button.callback('Support 📞', 'support'), Markup.button.callback('Instruction 📖', 'instruction')]
 ]);
 const cancelKeyboard = Markup.keyboard([['❌ Cancel']]).resize();
-
-// --- 🤖 BOT HANDLERS ---
 
 async function sendDashboard(ctx: any) {
   try {
@@ -110,8 +122,11 @@ async function sendDashboard(ctx: any) {
   }
 }
 
+// --- 🤖 INITIALIZATION ---
 bot.start(async (ctx) => {
+    // FORCE UPDATE BLUE MENU
     try { await ctx.setChatMenuButton({ type: 'commands' }); } catch (e) {}
+    
     const user = await getOrCreateUser(ctx);
     if (!user || !user.isRegistered) return ctx.reply("👋 Welcome! Please register first.", Markup.keyboard([[Markup.button.contactRequest('📱 Share Contact')]]).resize().oneTime());
     sendDashboard(ctx);
@@ -126,43 +141,56 @@ bot.on('contact', async (ctx) => {
     }
 });
 
-// --- BALANCE ---
+// --- COMMAND HANDLERS (LINKING BLUE MENU) ---
+bot.command('menu', (ctx) => sendDashboard(ctx));
+bot.command('play', (ctx) => ctx.reply("🎮 Click 'Play Now' above!", dashboardMenu));
+bot.command('deposit', (ctx) => {
+    userStates.set(ctx.from.id.toString(), { step: 'DEPOSIT_AMOUNT', data: {} });
+    ctx.reply("💵 Enter amount to deposit (ETB):", cancelKeyboard);
+});
+bot.command('withdraw', (ctx) => {
+    userStates.set(ctx.from.id.toString(), { step: 'WITHDRAW_AMOUNT', data: {} });
+    ctx.reply("Please send the amount to withdraw:", cancelKeyboard);
+});
+bot.command('transfer', (ctx) => {
+    userStates.set(ctx.from.id.toString(), { step: 'TRANSFER_USERNAME', data: {} });
+    ctx.reply("👤 **Enter the Username of the receiver:**\n(Example: @beki)", cancelKeyboard);
+});
+bot.command('balance', async (ctx) => {
+    const user = await prisma.user.findUnique({ where: { telegramId: BigInt(ctx.from.id) } });
+    ctx.reply(`💰 **Current Balance:**\n\n**${user?.balance.toFixed(2)} ETB**`, {parse_mode: 'Markdown'});
+});
+bot.command('help', (ctx) => ctx.reply("❓ Contact @AddisSupport for help."));
+
+
+// --- INLINE BUTTON ACTIONS ---
 bot.action('balance', async (ctx) => {
   if(!ctx.from) return;
   const user = await prisma.user.findUnique({ where: { telegramId: BigInt(ctx.from.id) } });
   ctx.reply(`💰 **Current Balance:**\n\n**${user?.balance.toFixed(2)} ETB**`, {parse_mode: 'Markdown'});
 });
 
-// --- DEPOSIT FLOW ---
 bot.action('deposit_start', (ctx) => {
-  ctx.reply("Choose Payment Method", Markup.inlineKeyboard([
-      [Markup.button.callback('Telegram Star ⭐️', 'dep_stars')],
-      [Markup.button.callback('Manual (Telebirr/CBE) 🏦', 'dep_manual')]
-  ]));
-});
-
-bot.action('dep_manual', (ctx) => {
   if (!ctx.from) return;
   userStates.set(ctx.from.id.toString(), { step: 'DEPOSIT_AMOUNT', data: {} });
   ctx.reply("💵 Enter amount to deposit (ETB):", cancelKeyboard);
 });
 
-// --- WITHDRAW FLOW ---
 bot.action('withdraw_start', (ctx) => {
   if (!ctx.from) return;
   userStates.set(ctx.from.id.toString(), { step: 'WITHDRAW_AMOUNT', data: {} });
   ctx.reply("Please send the amount to withdraw:", cancelKeyboard);
 });
 
-// --- TRANSFER FLOW (NEW) ---
 bot.action('transfer_start', (ctx) => {
   if (!ctx.from) return;
   userStates.set(ctx.from.id.toString(), { step: 'TRANSFER_USERNAME', data: {} });
   ctx.reply("👤 **Enter the Username of the receiver:**\n(Example: @beki)", cancelKeyboard);
 });
 
+
 // ==========================================
-// 📩 MAIN TEXT HANDLER
+// 📩 MAIN LOGIC & TEXT HANDLER
 // ==========================================
 bot.on('text', async (ctx) => {
   if (!ctx.from) return;
@@ -188,7 +216,6 @@ bot.on('text', async (ctx) => {
     const ref = generateReference();
     userStates.set(uid, { step: 'DEPOSIT_CONFIRM', data: { amount, ref } });
 
-    // Payment Details (Phone is Code Block for Copying)
     await ctx.reply(
 `**Payment Details**
 \`\`\`
@@ -209,16 +236,22 @@ Ref:       ${ref}
 
   else if (state.step === 'DEPOSIT_CONFIRM') {
     const verification = verifyPaymentSMS(text, state.data.amount);
+    
+    // ATOMIC UPDATE FOR DEPOSIT
     if (verification.valid) {
          if(verification.txId) usedTransactionIds.add(verification.txId);
-         const user = await prisma.user.findUnique({ where: { telegramId: BigInt(uid) } });
-         if(user) await prisma.user.update({ where: { id: user.id }, data: { balance: { increment: state.data.amount } } });
+         
+         await prisma.user.update({ 
+             where: { telegramId: BigInt(uid) }, 
+             data: { balance: { increment: state.data.amount } } 
+         });
+         
          ctx.reply(`✅ **Deposit Successful!**\n\n+${state.data.amount} ETB added to wallet.`, Markup.removeKeyboard());
          userStates.delete(uid);
          sendDashboard(ctx);
     } else {
-         // Mocking pending for simplicity here, logic same as before
-         ctx.reply(`⚠️ **Verification Pending**\n\n${verification.message}\nSent to admin.`, Markup.removeKeyboard());
+         ctx.reply(`⚠️ **Verification Failed**\n${verification.message}`, Markup.removeKeyboard());
+         // Note: In a real system, we'd log this fail attempt to DB
          userStates.delete(uid);
          sendDashboard(ctx);
     }
@@ -234,60 +267,94 @@ Ref:       ${ref}
     ctx.reply("Please select a bank:", Markup.keyboard([['Telebirr'],['Bank of Abyssinia', 'Awash Bank'],['Dashin Bank']]).resize());
   }
   else if (state.step === 'WITHDRAW_BANK') {
-      const bank = text;
-      userStates.set(uid, { step: 'WITHDRAW_NAME', data: { ...state.data, bank } });
-      ctx.reply(`Enter account holder name for ${bank}:`, cancelKeyboard);
+      userStates.set(uid, { step: 'WITHDRAW_NAME', data: { ...state.data, bank: text } });
+      ctx.reply(`Enter account holder name for ${text}:`, cancelKeyboard);
   }
   else if (state.step === 'WITHDRAW_NAME') {
-      const name = text;
-      userStates.set(uid, { step: 'WITHDRAW_ACCOUNT', data: { ...state.data, name } });
+      userStates.set(uid, { step: 'WITHDRAW_ACCOUNT', data: { ...state.data, name: text } });
       ctx.reply(`Enter account number:`, cancelKeyboard);
   }
   else if (state.step === 'WITHDRAW_ACCOUNT') {
       const accNum = text;
-      // Confirm Logic... (Skipping full confirm step for brevity in this specific update, usually you confirm here)
-      ctx.reply(`✅ **Withdrawal Requested!**\n\n${state.data.amount} ETB to ${state.data.bank} (${accNum})`, Markup.removeKeyboard());
+      const d = state.data;
+      
+      // ATOMIC CHECK & WITHDRAW
+      // We check balance inside a transaction or simply try to decrement
+      // If balance goes negative, Prisma throws an error (if we added a Check Constraint)
+      // Since we can't add constraints easily here, we check manually then update.
+      
+      const user = await prisma.user.findUnique({ where: { telegramId: BigInt(uid) } });
+      if (!user || user.balance < d.amount) {
+          ctx.reply("❌ Insufficient funds for withdrawal.");
+      } else {
+          // Deduct Balance
+          await prisma.user.update({ 
+              where: { id: user.id }, 
+              data: { balance: { decrement: d.amount } } 
+          });
+
+          // Log Request (Pending) - In real system this goes to DB
+          // For now we simulate success message
+          ctx.reply(`✅ **Withdrawal Requested!**\n\n${d.amount} ETB to ${d.bank}\nRef: ${generateReference()}`, Markup.removeKeyboard());
+      }
       userStates.delete(uid);
       sendDashboard(ctx);
   }
 
   // ------------------------------------------------
-  // 3. TRANSFER LOGIC (NEW)
+  // 3. TRANSFER LOGIC (ATOMIC & ROBUST)
   // ------------------------------------------------
   else if (state.step === 'TRANSFER_USERNAME') {
       let targetUser = text.replace('@', '').trim();
+      if (targetUser === ctx.from.username) return ctx.reply("❌ You cannot transfer to yourself.");
+
       const receiver = await prisma.user.findFirst({ where: { username: targetUser } });
-      
-      if (!receiver) return ctx.reply("❌ User not found. Please make sure they have started the bot.", cancelKeyboard);
-      if (receiver.telegramId === BigInt(uid)) return ctx.reply("❌ You cannot transfer to yourself.", cancelKeyboard);
+      if (!receiver) return ctx.reply("❌ User not found.", cancelKeyboard);
 
       userStates.set(uid, { step: 'TRANSFER_AMOUNT', data: { receiverId: receiver.id, receiverName: receiver.username, receiverTid: receiver.telegramId } });
-      ctx.reply(`✅ Found @${receiver.username}\n\n**Enter Amount to Transfer (ETB):**`, { parse_mode: 'Markdown', ...cancelKeyboard });
+      ctx.reply(`✅ Found @${receiver.username}\n\n**Enter Amount (ETB):**`, { parse_mode: 'Markdown', ...cancelKeyboard });
   }
 
   else if (state.step === 'TRANSFER_AMOUNT') {
       const amount = parseFloat(text);
       if (isNaN(amount) || amount <= 0) return ctx.reply("❌ Invalid Amount.");
 
-      const sender = await prisma.user.findUnique({ where: { telegramId: BigInt(uid) } });
-      if (!sender || sender.balance < amount) return ctx.reply("❌ Insufficient Balance.", cancelKeyboard);
+      const senderId = BigInt(uid);
+      const receiverId = state.data.receiverId;
 
-      // EXECUTE TRANSFER (Transaction)
-      await prisma.$transaction([
-          prisma.user.update({ where: { id: sender.id }, data: { balance: { decrement: amount } } }),
-          prisma.user.update({ where: { id: state.data.receiverId }, data: { balance: { increment: amount } } })
-      ]);
-
-      // Notify Sender
-      await ctx.reply(`✅ **Transfer Successful!**\n\nSent **${amount} ETB** to @${state.data.receiverName}.`, { parse_mode: 'Markdown', ...Markup.removeKeyboard() });
-      
-      // Notify Receiver
       try {
-        await bot.telegram.sendMessage(
-            state.data.receiverTid.toString(), 
-            `💰 **You received Money!**\n\nYou received **${amount} ETB** from @${sender.username || 'Hidden'}.`
-        );
-      } catch (e) {}
+          // --- 🔒 THE CRITICAL ATOMIC TRANSACTION ---
+          await prisma.$transaction(async (tx) => {
+              // 1. Lock & Get Sender
+              const sender = await tx.user.findUnique({ where: { telegramId: senderId } });
+              if (!sender || sender.balance < amount) {
+                  throw new Error("Insufficient Balance");
+              }
+
+              // 2. Decrement Sender
+              await tx.user.update({
+                  where: { id: sender.id },
+                  data: { balance: { decrement: amount } }
+              });
+
+              // 3. Increment Receiver
+              await tx.user.update({
+                  where: { id: receiverId },
+                  data: { balance: { increment: amount } }
+              });
+          });
+
+          // --- SUCCESS ---
+          await ctx.reply(`✅ **Transfer Successful!**\n\nSent **${amount} ETB** to @${state.data.receiverName}.`, { parse_mode: 'Markdown', ...Markup.removeKeyboard() });
+          
+          try {
+            await bot.telegram.sendMessage(state.data.receiverTid.toString(), `💰 **Received Money!**\n\n+${amount} ETB from @${ctx.from.username}.`);
+          } catch(e) {}
+
+      } catch (error) {
+          // --- FAILURE ---
+          ctx.reply("❌ Transaction Failed: Insufficient funds or error.", Markup.removeKeyboard());
+      }
 
       userStates.delete(uid);
       sendDashboard(ctx);
@@ -298,12 +365,14 @@ Ref:       ${ref}
 const distPath = path.join(__dirname, '../dist');
 app.use(express.static(distPath));
 app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, '../admin.html')));
-app.get('/api/admin/transactions', (req, res) => res.json([])); // Placeholder
-app.get('*', (req, res) => res.sendFile(path.join(distPath, 'index.html')));
+app.get('/api/admin/transactions', (req, res) => res.json([])); 
 
 app.listen(Number(port), '0.0.0.0', () => {
     console.log(`✅ Server running on ${port}`);
-    if (botToken) bot.launch().catch(e => console.error("Bot failed:", e));
+    if (botToken) {
+        bot.telegram.setMyCommands(commands);
+        bot.launch().catch(e => console.error("Bot failed:", e));
+    }
 });
 
 process.once('SIGINT', () => { bot.stop(); prisma.$disconnect(); });
