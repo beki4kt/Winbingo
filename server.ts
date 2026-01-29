@@ -21,7 +21,7 @@ const prisma = new PrismaClient();
 const app = express();
 const port = process.env.PORT || 8080;
 
-app.use(express.json()); // Enable JSON body parsing for Admin API
+app.use(express.json());
 app.use(cors());
 
 // --- 🧠 STATE MANAGEMENT ---
@@ -31,15 +31,74 @@ interface UserState {
 }
 const userStates = new Map<string, UserState>();
 
-// --- 🎮 GAME ENGINE ---
-// ... (Game engine logic remains the same, keeping it concise for this snippet) ...
-let globalGame = { roomId: 'LIVE-1', calledNumbers: [] as number[], currentCall: null as number | null, status: 'running', nextCallTime: Date.now() + 5000 };
-setInterval(() => { /* Game Loop Logic */ }, 5000); // (Simplified for readability)
+// --- 🛡️ DUPLICATE CHECKER ---
+const usedTransactionIds = new Set<string>();
 
+interface TransactionRequest {
+  id: string;
+  userId: string;
+  username: string;
+  type: 'DEPOSIT' | 'WITHDRAW';
+  amount: number;
+  phone?: string;
+  ref?: string;
+  sms?: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'AUTO_VERIFIED';
+  date: Date;
+}
+const pendingTransactions: TransactionRequest[] = [];
+
+
+// --- 🕵️ AUTOMATED SMS PARSER ---
+function verifyPaymentSMS(text: string, expectedAmount: number): { valid: boolean; provider?: string; txId?: string; message?: string } {
+  const cleanText = text.toLowerCase().replace(/,/g, ''); 
+  let detectedAmount = 0;
+  let provider = '';
+  let txId = '';
+
+  // 1. Telebirr Patterns
+  if (cleanText.includes('telebirr') || cleanText.includes('transferred') || cleanText.includes('paid')) {
+    const amountMatch = cleanText.match(/(\d+(\.\d+)?)\s*etb/) || cleanText.match(/etb\s*(\d+(\.\d+)?)/);
+    const idMatch = cleanText.match(/trans id:?\s*([a-z0-9]+)/i) || cleanText.match(/transaction id:?\s*([a-z0-9]+)/i);
+    
+    if (amountMatch) detectedAmount = parseFloat(amountMatch[1] || amountMatch[2]);
+    if (idMatch) txId = idMatch[1].toUpperCase();
+    provider = 'Telebirr';
+  }
+
+  // 2. CBE Patterns
+  else if (cleanText.includes('cbe') || cleanText.includes('debited') || cleanText.includes('transfer')) {
+    const amountMatch = cleanText.match(/etb\s*(\d+(\.\d+)?)/) || cleanText.match(/(\d+(\.\d+)?)\s*etb/);
+    const idMatch = cleanText.match(/ref:?\s*([a-z0-9]+)/i);
+
+    if (amountMatch) detectedAmount = parseFloat(amountMatch[1] || amountMatch[2]);
+    if (idMatch) txId = idMatch[1].toUpperCase();
+    provider = 'CBE';
+  }
+
+  // --- VALIDATION STEPS ---
+  if (detectedAmount === 0 || !txId) {
+    return { valid: false, message: "Could not find Amount or Transaction ID.\nመጠኑን ወይም የግብይት ቁጥሩን (Transaction ID) ማግኘት አልተቻለም።" };
+  }
+
+  if (Math.abs(detectedAmount - expectedAmount) > 1) {
+    return { valid: false, message: `Amount mismatch! Found ${detectedAmount}, expected ${expectedAmount}.\nየገንዘብ መጠን ልዩነት አለ! የተገኘው ${detectedAmount}፣ የተጠየቀው ${expectedAmount}።` };
+  }
+
+  if (usedTransactionIds.has(txId)) {
+    return { valid: false, message: "This Transaction ID has already been used!\nይህ የግብይት ቁጥር (Transaction ID) ከዚህ በፊት ጥቅም ላይ ውሏል!" };
+  }
+
+  return { valid: true, provider, txId };
+}
+
+
+// --- 🎮 GAME ENGINE ---
+let globalGame = { roomId: 'LIVE-1', calledNumbers: [] as number[], currentCall: null as number | null, status: 'running', nextCallTime: Date.now() + 5000 };
+setInterval(() => { /* Game Logic */ }, 5000);
 
 // --- 🤖 BOT SETUP ---
 const botToken = process.env.BOT_TOKEN;
-if (!botToken) console.error("❌ BOT_TOKEN is missing!");
 const bot = new Telegraf(botToken || '');
 const appUrl = process.env.APP_URL || 'https://your-app.fly.dev';
 
@@ -57,34 +116,12 @@ async function getOrCreateUser(ctx: Context) {
 
 function generateReference() { return crypto.randomBytes(4).toString('hex').toUpperCase(); }
 
-
 // --- 👮 ADMIN PANEL API ---
-
-// 1. Get Pending Transactions (Mocking a "Transaction" table concept using the User state or a simple in-memory list for now)
-// ideally you should create a Transaction model in schema.prisma, but for now we will use a memory list.
-interface TransactionRequest {
-  id: string;
-  userId: string;
-  username: string;
-  type: 'DEPOSIT' | 'WITHDRAW';
-  amount: number;
-  phone?: string;
-  ref?: string;
-  sms?: string;
-  status: 'PENDING' | 'APPROVED' | 'REJECTED';
-  date: Date;
-}
-
-const pendingTransactions: TransactionRequest[] = [];
-
-// API: Get All Pending
 app.get('/api/admin/transactions', (req, res) => {
-  // Simple Password Check (Add ?auth=admin123 to URL)
   if (req.query.auth !== 'admin123') return res.status(403).json({ error: "Unauthorized" });
-  res.json(pendingTransactions.filter(t => t.status === 'PENDING'));
+  res.json(pendingTransactions.filter(t => t.status !== 'REJECTED'));
 });
 
-// API: Approve/Reject
 app.post('/api/admin/action', async (req, res) => {
   if (req.body.auth !== 'admin123') return res.status(403).json({ error: "Unauthorized" });
   
@@ -96,35 +133,21 @@ app.post('/api/admin/action', async (req, res) => {
 
   const user = await prisma.user.findUnique({ where: { telegramId: BigInt(tx.userId) } });
   
-  if (user) {
-    try {
-      if (action === 'APPROVE') {
-        // Update Balance
-        if (tx.type === 'DEPOSIT') {
-          await prisma.user.update({ where: { id: user.id }, data: { balance: { increment: tx.amount } } });
-          bot.telegram.sendMessage(tx.userId, `✅ **Deposit Approved!**\n\nYour balance has been credited with ${tx.amount} ETB.`, {parse_mode: 'Markdown'});
-        } else {
-           // Withdrawal balance was already deducted (optionally), or deduc NOW if you prefer.
-           // For safety, usually deduct immediately upon request, or lock funds. 
-           // Here assuming we deduct now:
-           await prisma.user.update({ where: { id: user.id }, data: { balance: { decrement: tx.amount } } });
-           bot.telegram.sendMessage(tx.userId, `✅ **Withdrawal Processed!**\n\nWe have sent ${tx.amount} ETB to ${tx.phone}.`, {parse_mode: 'Markdown'});
-        }
-      } else {
-        // Reject
-        bot.telegram.sendMessage(tx.userId, `❌ **Transaction Rejected**\n\nYour ${tx.type.toLowerCase()} request for ${tx.amount} ETB was rejected. Contact support.`, {parse_mode: 'Markdown'});
-      }
-    } catch (e) {
-      console.error("Transact Error", e);
+  // FIX: Added 'as string' cast to fix Type Error
+  if (user && action === 'APPROVE' && (tx.status as string) !== 'AUTO_VERIFIED') { 
+    if (tx.type === 'DEPOSIT') {
+       await prisma.user.update({ where: { id: user.id }, data: { balance: { increment: tx.amount } } });
+       bot.telegram.sendMessage(tx.userId, `✅ **Deposit Approved! / ገቢ ተረጋግጧል!**\n\nYour balance has been credited with **${tx.amount} ETB**.\n**${tx.amount} ብር** ወደ ሂሳብዎ ገብቷል።`, {parse_mode: 'Markdown'});
+    } else {
+       bot.telegram.sendMessage(tx.userId, `✅ **Withdrawal Approved! / ወጪ ተፈቅዷል!**\n\nWe have sent the money to your phone.\nገንዘቡ ወደ ስልክ ቁጥርዎ ተልኳል።`, {parse_mode: 'Markdown'});
     }
+  } else if (user && action === 'REJECT') {
+      bot.telegram.sendMessage(tx.userId, `❌ **Transaction Rejected / ተቀባይነት አላገኘም**\n\nPlease contact support if you think this is a mistake.\nይህ ስህተት ነው ብለው ካሰቡ እባክዎ እርዳታ (Support) ያናግሩ።`, {parse_mode: 'Markdown'});
   }
-
   res.json({ success: true });
 });
 
-
-// --- 🤖 BOT HANDLERS (Updated to push to Admin List) ---
-
+// --- 🤖 BOT HANDLERS ---
 const dashboardMenu = Markup.inlineKeyboard([
   [Markup.button.webApp('Play / ይጫወቱ 🎮', appUrl), Markup.button.callback('Register / ይመዝገቡ 📝', 'register_check')],
   [Markup.button.callback('Check Balance / ሂሳብ 💰', 'balance'), Markup.button.callback('Deposit / ገቢ 💵', 'deposit_start')],
@@ -133,77 +156,132 @@ const dashboardMenu = Markup.inlineKeyboard([
 ]);
 const cancelKeyboard = Markup.keyboard([['❌ Cancel / ሰርዝ']]).resize();
 
-// ... (Start, Contact, Menu handlers same as before) ...
 bot.start(async (ctx) => {
     try { await ctx.setChatMenuButton({ type: 'commands' }); } catch (e) {}
     const user = await getOrCreateUser(ctx);
-    if (!user || !user.isRegistered) return ctx.reply("Please register first.", Markup.keyboard([[Markup.button.contactRequest('📱 Share Contact')]]).resize().oneTime());
+    if (!user || !user.isRegistered) return ctx.reply("👋 Welcome! Please register first.\nእንኳን ደህና መጡ! እባክዎ መጀመሪያ ይመዝገቡ።", Markup.keyboard([[Markup.button.contactRequest('📱 Share Contact / ስልክ ቁጥር ያጋሩ')]]).resize().oneTime());
     ctx.replyWithPhoto({ source: path.join(rootPath, 'win.png') }, { caption: "🏆 Win Bingo Menu", ...dashboardMenu });
 });
-bot.on('contact', async (ctx) => { /* Same registration logic */ });
+bot.on('contact', async (ctx) => { 
+    const user = await getOrCreateUser(ctx);
+    if (user) {
+        await prisma.user.update({ where: { telegramId: user.telegramId }, data: { isRegistered: true, phoneNumber: ctx.message.contact.phone_number } });
+        ctx.reply("✅ **Registered Successfully! / ምዝገባው ተሳክቷል!**", Markup.removeKeyboard());
+        ctx.replyWithPhoto({ source: path.join(rootPath, 'win.png') }, { caption: "🏆 Menu", ...dashboardMenu });
+    }
+});
 
-
-// --- DEPOSIT FLOW ---
+// DEPOSIT FLOW
 bot.action('deposit_start', (ctx) => {
-  ctx.reply("Choose Method:", Markup.inlineKeyboard([[Markup.button.callback('Manual (Telebirr/CBE)', 'dep_manual')]]));
+  ctx.reply("👇 **Choose Method / አማራጭ ይምረጡ:**", Markup.inlineKeyboard([[Markup.button.callback('Manual (Telebirr/CBE) 🏦', 'dep_manual')]]));
 });
 bot.action('dep_manual', (ctx) => {
   if (!ctx.from) return;
   userStates.set(ctx.from.id.toString(), { step: 'DEPOSIT_AMOUNT', data: {} });
-  ctx.reply("Enter Amount (ETB):", cancelKeyboard);
+  ctx.reply("💵 **Enter Deposit Amount (ETB):**\nማስገባት የሚፈልጉትን የገንዘብ መጠን ይጻፉ:", cancelKeyboard);
 });
 
-// --- WITHDRAW FLOW ---
+// WITHDRAW FLOW
 bot.action('withdraw_start', (ctx) => {
   if (!ctx.from) return;
   userStates.set(ctx.from.id.toString(), { step: 'WITHDRAW_AMOUNT', data: {} });
-  ctx.reply("Enter Amount to Withdraw:", cancelKeyboard);
+  ctx.reply("🏦 **Enter Withdrawal Amount (ETB):**\nሊያወጡት የሚፈልጉትን መጠን ያስገቡ:", cancelKeyboard);
 });
 
-// --- TEXT HANDLER ---
+// TEXT HANDLER
 bot.on('text', async (ctx) => {
   if (!ctx.from) return;
   const uid = ctx.from.id.toString();
   const text = ctx.message.text;
   const state = userStates.get(uid);
 
-  if (text.includes('Cancel')) { userStates.delete(uid); return ctx.reply("Cancelled", Markup.removeKeyboard()); }
+  if (text.includes('Cancel') || text.includes('ሰርዝ')) { 
+      userStates.delete(uid); 
+      return ctx.reply("❌ **Cancelled / ተሰርዟል**", Markup.removeKeyboard()).then(() => ctx.replyWithPhoto({ source: path.join(rootPath, 'win.png') }, { caption: "🏆 Menu", ...dashboardMenu })); 
+  }
+
   if (!state) return;
 
-  // DEPOSIT STEPS
+  // --- 1. ASK FOR AMOUNT & INSTRUCT ---
   if (state.step === 'DEPOSIT_AMOUNT') {
     const amount = parseFloat(text);
-    if (isNaN(amount) || amount < 5) return ctx.reply("Invalid Amount.");
+    if (isNaN(amount) || amount < 5) return ctx.reply("❌ Invalid Amount. Minimum is 5 ETB.\nትክክለኛ ቁጥር ያስገቡ። ቢያንስ 5 ብር።");
+    
     const ref = generateReference();
     userStates.set(uid, { step: 'DEPOSIT_CONFIRM', data: { amount, ref } });
-    // Show Instructions
-    ctx.reply(`**Deposit Request**\nAmount: ${amount}\nRef: ${ref}\n\n1. Transfer ${amount} to 0924497619\n2. **Paste the SMS here** to confirm.`, {parse_mode: 'Markdown'});
-  }
-  else if (state.step === 'DEPOSIT_CONFIRM') {
-    // SAVE TO PENDING LIST
-    pendingTransactions.push({
-      id: generateReference(),
-      userId: uid,
-      username: ctx.from.username || 'Unknown',
-      type: 'DEPOSIT',
-      amount: state.data.amount,
-      ref: state.data.ref,
-      sms: text, // The user pasted SMS
-      status: 'PENDING',
-      date: new Date()
-    });
-    ctx.reply("✅ **Request Sent to Admin!**\nWait for approval.", Markup.removeKeyboard());
-    userStates.delete(uid);
+
+    ctx.reply(
+`**Deposit Request / የገቢ ጥያቄ**
+Amount: **${amount} ETB**
+
+1. Transfer **${amount} ETB** to **0924497619**.
+   ወደ **0924497619** **${amount} ብር** ያስተላልፉ።
+
+2. **Copy the full SMS** message you receive from Telebirr/CBE.
+   ከቴሌብር ወይም ንግድ ባንክ የሚደርስዎትን **ሙሉ የጽሑፍ መልእክት (SMS)** ኮፒ ያድርጉ።
+
+3. **Paste it here** to verify instantly! 👇
+   ወዲያውኑ ለማረጋገጥ መልእክቱን እዚህ ይለጥፉ (Paste)! 👇`, 
+    {parse_mode: 'Markdown'});
   }
 
-  // WITHDRAW STEPS
+  // --- 2. VERIFY SMS ---
+  else if (state.step === 'DEPOSIT_CONFIRM') {
+    const requestedAmount = state.data.amount;
+    const verification = verifyPaymentSMS(text, requestedAmount);
+
+    if (verification.valid) {
+        // SUCCESS
+        if(verification.txId) usedTransactionIds.add(verification.txId);
+
+        const user = await prisma.user.findUnique({ where: { telegramId: BigInt(uid) } });
+        if(user) await prisma.user.update({ where: { id: user.id }, data: { balance: { increment: requestedAmount } } });
+
+        pendingTransactions.push({
+            id: generateReference(),
+            userId: uid,
+            username: ctx.from.username || 'Unknown',
+            type: 'DEPOSIT',
+            amount: requestedAmount,
+            ref: state.data.ref,
+            sms: text,
+            status: 'AUTO_VERIFIED',
+            date: new Date()
+        });
+
+        ctx.reply(`✅ **Payment Verified! / ክፍያ ተረጋግጧል!**\n\n**${requestedAmount} ETB** has been added to your wallet automatically.\n**${requestedAmount} ብር** ወደ ኪስ ቦርሳዎ በራስ-ሰር ገብቷል።\n\nTransaction ID: \`${verification.txId}\``, {parse_mode: 'Markdown', ...Markup.removeKeyboard()});
+        
+        userStates.delete(uid);
+        setTimeout(() => ctx.replyWithPhoto({ source: path.join(rootPath, 'win.png') }, { caption: "🏆 Menu", ...dashboardMenu }), 1500);
+
+    } else {
+        // FAILURE
+        pendingTransactions.push({
+            id: generateReference(),
+            userId: uid,
+            username: ctx.from.username || 'Unknown',
+            type: 'DEPOSIT',
+            amount: requestedAmount,
+            ref: state.data.ref,
+            sms: text,
+            status: 'PENDING',
+            date: new Date()
+        });
+
+        ctx.reply(`⚠️ **Auto-Verification Failed / በራስ-ሰር ማረጋገጥ አልተቻለም**\n\n${verification.message}\n\nDon't worry! We have sent your request to the Admin for manual approval.\nWait for confirmation.\n\nአይጨነቁ! ጥያቄዎ ለሰው (Admin) ተልኳል፤ በትዕግስት ይጠብቁ።`, Markup.removeKeyboard());
+        userStates.delete(uid);
+    }
+  }
+
+  // --- WITHDRAW LOGIC ---
   else if (state.step === 'WITHDRAW_AMOUNT') {
     const amount = parseFloat(text);
+    if (isNaN(amount) || amount <= 0) return ctx.reply("❌ Invalid Amount.");
+    
     userStates.set(uid, { step: 'WITHDRAW_PHONE', data: { amount } });
-    ctx.reply("Enter Phone Number:", cancelKeyboard);
+    ctx.reply("📞 **Enter Phone Number:**\nገንዘብዎ የሚላክበትን ስልክ ቁጥር ያስገቡ:", cancelKeyboard);
   }
   else if (state.step === 'WITHDRAW_PHONE') {
-    // SAVE TO PENDING LIST
     pendingTransactions.push({
       id: generateReference(),
       userId: uid,
@@ -214,23 +292,31 @@ bot.on('text', async (ctx) => {
       status: 'PENDING',
       date: new Date()
     });
-    ctx.reply("✅ **Withdrawal Requested!**\nWait for approval.", Markup.removeKeyboard());
+    ctx.reply("✅ **Withdrawal Requested! / ወጪ ተጠይቋል!**\n\nWe will process it shortly.\nበቅርቡ እናስተናግዳለን።", Markup.removeKeyboard());
     userStates.delete(uid);
+    setTimeout(() => ctx.replyWithPhoto({ source: path.join(rootPath, 'win.png') }, { caption: "🏆 Menu", ...dashboardMenu }), 1500);
   }
 });
 
 // --- SERVER SETUP ---
 const distPath = path.join(__dirname, '../dist');
 app.use(express.static(distPath));
+app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, '../admin.html')));
+app.get('/api/game/sync', (req, res) => res.json(globalGame));
+app.get('/api/user', async (req, res) => { 
+  const tid = req.query.id as string;
+  if (!tid) return res.status(400).json({ error: "No ID" });
+  try {
+      const user = await prisma.user.findUnique({ where: { telegramId: BigInt(tid) } });
+      user ? res.json({ ...user, telegramId: user.telegramId.toString() }) : res.status(404).json({ error: "Not found" });
+  } catch (e) { res.status(500).json({ error: "Server Error" }); }
+});
+app.get('*', (req, res) => res.sendFile(path.join(distPath, 'index.html')));
 
-// ADMIN PANEL ROUTE (Serve the HTML file)
-app.get('/admin', (req, res) => {
-    res.sendFile(path.join(__dirname, '../admin.html'));
+app.listen(Number(port), '0.0.0.0', () => {
+    console.log(`✅ Server running on ${port}`);
+    if (botToken) bot.launch().catch(e => console.error("Bot failed:", e));
 });
 
-// Existing APIs
-app.get('/api/game/sync', (req, res) => res.json(globalGame));
-app.get('/api/user', async (req, res) => { /* ... */ });
-
-bot.launch();
-app.listen(port, () => console.log(`🚀 Server running on ${port}`));
+process.once('SIGINT', () => { bot.stop(); prisma.$disconnect(); });
+process.once('SIGTERM', () => { bot.stop(); prisma.$disconnect(); });
