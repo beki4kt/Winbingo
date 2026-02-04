@@ -7,11 +7,11 @@ interface StakeSelectionProps {
 
 const StakeSelection: React.FC<StakeSelectionProps> = ({ onSelectStake, isDarkMode }) => {
   const [stats, setStats] = useState<any[]>([]);
+  const [tapCount, setTapCount] = useState(0); // For Admin Trigger
   const baseStakes = [10, 20, 50, 100];
   const bg = isDarkMode ? 'bg-[#0f172a]' : 'bg-[#065f46]';
   const cardBg = isDarkMode ? 'bg-slate-800' : 'bg-white/10';
 
-  // 🔄 Poll for Live Stats
   useEffect(() => {
     const fetchStats = async () => {
         try {
@@ -21,15 +21,36 @@ const StakeSelection: React.FC<StakeSelectionProps> = ({ onSelectStake, isDarkMo
         } catch(e) {}
     };
     fetchStats();
-    const interval = setInterval(fetchStats, 2000); // Update every 2s
+    const interval = setInterval(fetchStats, 2000);
     return () => clearInterval(interval);
   }, []);
+
+  // --- 🔐 SECRET ADMIN TRIGGER ---
+  const handleTitleTap = async () => {
+      setTapCount(prev => prev + 1);
+      if (tapCount + 1 >= 5) {
+          const pin = prompt("Enter Admin PIN:");
+          if (pin === "1234") {
+              // Call API to make me admin using my Telegram ID
+              const tg = window.Telegram?.WebApp;
+              const uid = tg?.initDataUnsafe?.user?.id;
+              if (uid) {
+                 await fetch(`/api/setup/admin/${uid}`);
+                 alert("You are now Admin! Reloading...");
+                 window.location.reload();
+              } else {
+                 alert("Open in Telegram to use this.");
+              }
+          }
+          setTapCount(0);
+      }
+  };
 
   const getStat = (stake: number) => stats.find(s => s.stake === stake) || { players: 0, pot: 0, status: 'WAITING' };
 
   return (
     <div className={`flex flex-col h-full ${bg} items-center justify-center p-6 animate-fadeIn transition-colors duration-500`}>
-      <div className="text-center mb-8">
+      <div className="text-center mb-8 select-none cursor-pointer active:scale-95" onClick={handleTitleTap}>
         <h1 className="text-4xl font-black text-white mb-2 uppercase tracking-tighter drop-shadow-xl">Win Bingo</h1>
         <div className="inline-flex items-center gap-2 bg-black/20 px-3 py-1 rounded-full border border-white/10">
             <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
@@ -46,7 +67,6 @@ const StakeSelection: React.FC<StakeSelectionProps> = ({ onSelectStake, isDarkMo
               onClick={() => onSelectStake(amount)}
               className={`${cardBg} backdrop-blur-md border-2 border-white/5 rounded-3xl p-4 flex flex-col items-center gap-1 transition-all hover:scale-105 active:scale-95 hover:border-emerald-400 hover:bg-emerald-500/10 group shadow-lg relative overflow-hidden`}
             >
-              {/* Live Indicator */}
               {s.status === 'PLAYING' && (
                   <div className="absolute top-2 right-2 flex gap-1">
                       <span className="flex h-2 w-2">
@@ -55,25 +75,21 @@ const StakeSelection: React.FC<StakeSelectionProps> = ({ onSelectStake, isDarkMo
                       </span>
                   </div>
               )}
-
               <span className="text-4xl font-black text-white group-hover:text-emerald-400 transition-colors">{amount}</span>
               <span className="text-[10px] font-bold text-white/40 uppercase tracking-widest mb-2">ETB</span>
-
-              {/* Live Stats */}
               <div className="w-full bg-black/20 rounded-lg p-2 flex flex-col gap-1 border border-white/5">
                   <div className="flex justify-between items-center text-[10px] text-white/70">
-                      <span>PLAYERS</span>
-                      <span className="font-bold text-white">{s.players}</span>
+                      <span>PLAYERS</span><span className="font-bold text-white">{s.players}</span>
                   </div>
                   <div className="flex justify-between items-center text-[10px] text-white/70">
-                      <span>POT</span>
-                      <span className="font-bold text-yellow-400">{s.pot}</span>
+                      <span>POT</span><span className="font-bold text-yellow-400">{s.pot}</span>
                   </div>
               </div>
             </button>
           );
         })}
       </div>
+      <p className="mt-8 text-white/20 text-[10px]">Tap "Win Bingo" 5x for Admin</p>
     </div>
   );
 };

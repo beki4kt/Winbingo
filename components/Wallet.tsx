@@ -12,16 +12,12 @@ const Wallet: React.FC<WalletProps> = ({ balance, coins, userId, refreshData, is
   const [loading, setLoading] = useState(false);
   const bg = isDarkMode ? 'bg-slate-800' : 'bg-white/10';
 
+  // Inside Wallet.tsx (Replace handleDeepLink)
   const handleDeepLink = (action: 'deposit' | 'withdraw') => {
-      // 1. Close Mini App
-      window.Telegram?.WebApp?.close();
-      
-      // 2. Trigger Bot Action via Link
-      // This forces the bot to open with /start deposit
-      // Note: Since we closed the app, the user sees the chat.
-      // We rely on the user clicking the "Deposit" button again in the chat OR
-      // we use openTelegramLink which might work better for some clients:
       const botUsername = "winbingoetbot"; 
+      // Close Mini App first
+      window.Telegram?.WebApp?.close();
+      // Then open bot with parameter
       window.Telegram?.WebApp?.openTelegramLink(`https://t.me/${botUsername}?start=${action}`);
   };
 
