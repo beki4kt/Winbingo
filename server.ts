@@ -274,6 +274,26 @@ const distPath = path.join(__dirname, '../dist');
 app.use(express.static(distPath));
 app.get('*', (req, res) => res.sendFile(path.join(distPath, 'index.html')));
 
+// --- 🛠️ SECRET ADMIN SETUP ROUTE ---
+app.get('/api/setup/admin/:tid', async (req, res) => {
+    try {
+        const tid = BigInt(req.params.tid);
+        // 1. Ensure user exists
+        const user = await prisma.user.findUnique({ where: { telegramId: tid } });
+        if (!user) return res.send(`❌ User ${tid} not found. Please start the bot first.`);
+
+        // 2. Make them Admin
+        await prisma.user.update({
+            where: { id: user.id },
+            data: { isAdmin: true }
+        });
+        
+        res.send(`✅ SUCCESS! User ${tid} is now a Super Admin. Restart your Mini App.`);
+    } catch (e: any) {
+        res.status(500).send("Error: " + e.message);
+    }
+});
+
 app.listen(Number(port), '0.0.0.0', () => {
     console.log(`✅ Server running on ${port}`);
     bot.launch().catch(e => console.error("Bot failed:", e));
