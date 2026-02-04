@@ -17,61 +17,91 @@ interface ActiveSession {
 
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>(View.LOBBY);
-  const [walletBalance, setWalletBalance] = useState<number>(1.91); 
+  const [walletBalance, setWalletBalance] = useState<number>(0); 
   const [bonus, setBonus] = useState<number>(0);
   const [activeSessions, setActiveSessions] = useState<ActiveSession[]>([]);
   const [selectedSessionIdx, setSelectedSessionIdx] = useState<number>(0);
   const [selectedNumber, setSelectedNumber] = useState<number | null>(null);
   const [isDarkMode, setIsDarkMode] = useState<boolean>(false);
+  const [userId, setUserId] = useState<string | null>(null);
 
+  // 1. INITIALIZE & FETCH REAL BALANCE
   useEffect(() => {
-    if (window.Telegram && window.Telegram.WebApp) {
-      const tg = window.Telegram.WebApp;
-      tg.ready();
-      tg.expand();
-      const color = isDarkMode ? '#0f172a' : '#065f46';
-      if (tg.isVersionAtLeast && tg.isVersionAtLeast('6.1')) {
-        try {
-          if (typeof tg.setHeaderColor === 'function') tg.setHeaderColor(color);
-          if (typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(color);
-        } catch (e) {
-          console.warn("Telegram theme updates failed", e);
+    const initApp = async () => {
+      if (window.Telegram?.WebApp) {
+        const tg = window.Telegram.WebApp;
+        tg.ready();
+        tg.expand();
+        
+        const telegramId = tg.initDataUnsafe?.user?.id;
+        if (telegramId) {
+          setUserId(telegramId.toString());
+          try {
+            // Call Backend to get Real Balance
+            const res = await fetch(`/api/user/${telegramId}`);
+            const data = await res.json();
+            if (data.balance !== undefined) {
+              setWalletBalance(data.balance);
+            }
+          } catch (e) {
+            console.error("Failed to load user data", e);
+          }
         }
       }
-    }
-  }, [isDarkMode]);
+    };
+    initApp();
+  }, []);
 
   const safeAlert = (message: string) => {
     const tg = window.Telegram?.WebApp;
-    if (tg && tg.isVersionAtLeast && tg.isVersionAtLeast('6.0') && typeof tg.showAlert === 'function') {
-      tg.showAlert(message);
-    } else {
-      alert(message);
-    }
+    if (tg?.showAlert) tg.showAlert(message);
+    else alert(message);
   };
 
-  const handleJoinGame = (num: number, stake: number, roomId: string) => {
-    if (walletBalance < stake) {
-      safeAlert("Insufficient balance! Refill your wallet.");
+  // 2. BUY TICKET (Integrated with Server)
+  const handleJoinGame = async (num: number, stake: number, roomId: string) => {
+    if (!userId) {
+      safeAlert("Please open in Telegram.");
       return;
     }
-    const tg = window.Telegram?.WebApp;
-    if (tg && tg.isVersionAtLeast && tg.isVersionAtLeast('6.1') && tg.HapticFeedback?.impactOccurred) {
-      tg.HapticFeedback.impactOccurred('medium');
+
+    if (walletBalance < stake) {
+      safeAlert("Insufficient balance! Please deposit.");
+      return;
     }
-    setWalletBalance(prev => prev - stake);
-    const newSession = { roomId, boardNumber: num, stake };
-    const newSessions = [...activeSessions, newSession];
-    setActiveSessions(newSessions);
-    setSelectedSessionIdx(newSessions.length - 1);
-    setCurrentView(View.ACTIVE_GAME);
+
+    try {
+      // Call Backend to Deduct Money
+      const res = await fetch('/api/game/buy-ticket', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tid: userId, price: stake })
+      });
+      
+      const result = await res.json();
+
+      if (result.success) {
+        // Update Local State with Server Balance
+        setWalletBalance(result.newBalance);
+        
+        // Haptic Feedback
+        window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('medium');
+
+        // Start Game
+        const newSession = { roomId, boardNumber: num, stake };
+        const newSessions = [...activeSessions, newSession];
+        setActiveSessions(newSessions);
+        setSelectedSessionIdx(newSessions.length - 1);
+        setCurrentView(View.ACTIVE_GAME);
+      } else {
+        safeAlert(result.message || "Transaction Failed");
+      }
+    } catch (e) {
+      safeAlert("Connection Error");
+    }
   };
 
   const handleLeaveGame = (roomId: string) => {
-    const tg = window.Telegram?.WebApp;
-    if (tg && tg.isVersionAtLeast && tg.isVersionAtLeast('6.1') && tg.HapticFeedback?.notificationOccurred) {
-      tg.HapticFeedback.notificationOccurred('warning');
-    }
     const updated = activeSessions.filter(s => s.roomId !== roomId);
     setActiveSessions(updated);
     if (updated.length === 0) {
@@ -84,9 +114,7 @@ const App: React.FC = () => {
   };
 
   const returnToGame = () => {
-    if (activeSessions.length > 0) {
-      setCurrentView(View.ACTIVE_GAME);
-    }
+    if (activeSessions.length > 0) setCurrentView(View.ACTIVE_GAME);
   };
 
   const renderContent = () => {
@@ -113,45 +141,21 @@ const App: React.FC = () => {
             setBalance={setWalletBalance}
             roomId={currentSession.roomId}
             isDarkMode={isDarkMode}
+            userId={userId} // Pass ID for winning logic
           />
         );
       case View.WALLET:
         return <Wallet balance={walletBalance} setBalance={setWalletBalance} isDarkMode={isDarkMode} />;
-      case View.SCORES:
-        return <Leaderboard isDarkMode={isDarkMode} />;
-      case View.HISTORY:
-        return <History isDarkMode={isDarkMode} />;
-      case View.ADMIN:
-        return <Admin isDarkMode={isDarkMode} />;
-      case View.PROFILE:
-        return (
-          <div className="p-8 text-white text-center animate-fadeIn min-h-full pb-32">
-            <div className={`w-24 h-24 ${isDarkMode ? 'bg-indigo-500/20' : 'bg-white/20'} rounded-full mx-auto mb-4 flex items-center justify-center border-4 border-white/10 shadow-lg`}>
-              <i className="fas fa-user text-4xl text-white"></i>
-            </div>
-            <h2 className="text-2xl font-black mb-1">Win Player</h2>
-            <p className="text-white/60 text-xs mb-6 font-bold uppercase">ID: 99281734</p>
-            <div className={`${isDarkMode ? 'bg-gray-800' : 'bg-white/10'} rounded-3xl p-6 text-left space-y-4 shadow-inner border border-white/5`}>
-              <div className="flex justify-between text-sm">
-                <span className="font-bold opacity-70">Total Games</span>
-                <span className="font-black">142</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="font-bold opacity-70">Total Won</span>
-                <span className="font-black text-orange-200">1,405 ETB</span>
-              </div>
-            </div>
-          </div>
-        );
-      default:
-        return null;
+      case View.SCORES: return <Leaderboard isDarkMode={isDarkMode} />;
+      case View.HISTORY: return <History isDarkMode={isDarkMode} />;
+      case View.ADMIN: return <Admin isDarkMode={isDarkMode} />;
+      case View.PROFILE: return <div className="p-10 text-white text-center">User ID: {userId}</div>;
+      default: return null;
     }
   };
 
-  const bgColor = isDarkMode ? 'bg-[#0f172a]' : 'bg-[#065f46]';
-
   return (
-    <div className={`flex flex-col h-[100dvh] w-full max-w-md mx-auto ${bgColor} overflow-hidden shadow-2xl relative transition-colors duration-500`}>
+    <div className={`flex flex-col h-[100dvh] w-full max-w-md mx-auto ${isDarkMode ? 'bg-[#0f172a]' : 'bg-[#065f46]'} overflow-hidden shadow-2xl relative transition-colors duration-500`}>
       {(currentView !== View.ADMIN && currentView !== View.ACTIVE_GAME) && (
         <Header 
           balance={walletBalance} 
@@ -160,30 +164,14 @@ const App: React.FC = () => {
           stake={activeSessions.reduce((acc, s) => acc + s.stake, 0)} 
           onReturnToGame={returnToGame}
           isDarkMode={isDarkMode}
-          toggleTheme={() => {
-            const tg = window.Telegram?.WebApp;
-            if (tg && tg.isVersionAtLeast && tg.isVersionAtLeast('6.1') && tg.HapticFeedback?.impactOccurred) {
-              tg.HapticFeedback.impactOccurred('light');
-            }
-            setIsDarkMode(!isDarkMode);
-          }}
+          toggleTheme={() => setIsDarkMode(!isDarkMode)}
         />
       )}
-      
-      <main className="flex-1 overflow-hidden relative">
-        {renderContent()}
-      </main>
-
+      <main className="flex-1 overflow-hidden relative">{renderContent()}</main>
       {currentView !== View.ACTIVE_GAME && (
         <Navigation 
           currentView={currentView} 
-          setView={(v) => {
-            const tg = window.Telegram?.WebApp;
-            if (tg && tg.isVersionAtLeast && tg.isVersionAtLeast('6.1') && tg.HapticFeedback?.impactOccurred) {
-              tg.HapticFeedback.impactOccurred('light');
-            }
-            setCurrentView(v);
-          }} 
+          setView={setCurrentView} 
           isDarkMode={isDarkMode}
           activeGameCount={activeSessions.length}
         />

@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-// FIX 1: Add '.js' extension to satisfy NodeNext module resolution
-import { generateFairBoard, checkBingoWin } from '../utils.js';
+import { generateFairBoard, checkBingoWin } from '../utils';
 
 interface GameRoomProps {
   onLeave: () => void;
@@ -10,9 +9,10 @@ interface GameRoomProps {
   setBalance: (bal: number) => void;
   roomId: string;
   isDarkMode: boolean;
+  userId: string | null;
 }
 
-const GameRoom: React.FC<GameRoomProps> = ({ onLeave, boardNumber, stake, balance, setBalance, roomId, isDarkMode }) => {
+const GameRoom: React.FC<GameRoomProps> = ({ onLeave, boardNumber, stake, balance, setBalance, roomId, isDarkMode, userId }) => {
   const [gameState, setGameState] = useState<'waiting' | 'starting' | 'running' | 'ended'>('waiting');
   const [currentCall, setCurrentCall] = useState<number | null>(null);
   const [calledNumbers, setCalledNumbers] = useState<number[]>([]);
@@ -24,7 +24,7 @@ const GameRoom: React.FC<GameRoomProps> = ({ onLeave, boardNumber, stake, balanc
   const DERASH = (stake * PLAYER_COUNT) * 0.8;
   const cardMatrix = useMemo(() => generateFairBoard(boardNumber), [boardNumber]);
 
-  // --- MULTIPLAYER SYNC ---
+  // --- 📡 MULTIPLAYER SYNC ---
   useEffect(() => {
     const interval = setInterval(async () => {
       try {
@@ -32,13 +32,11 @@ const GameRoom: React.FC<GameRoomProps> = ({ onLeave, boardNumber, stake, balanc
         const data = await res.json();
         
         if (data) {
-           setCalledNumbers(data.calledNumbers);
+           setCalledNumbers(data.calledNumbers || []);
            setCurrentCall(data.currentCall);
            setServerRoomId(data.roomId);
            
-           if (data.status === 'ended' && gameState !== 'ended') {
-             setGameState('ended');
-           } else if (data.status === 'running' && gameState !== 'running') {
+           if (data.status === 'running' && gameState !== 'running' && gameState !== 'ended') {
              setGameState('running');
            }
         }
@@ -55,16 +53,40 @@ const GameRoom: React.FC<GameRoomProps> = ({ onLeave, boardNumber, stake, balanc
     setMarkedNumbers(prev => prev.includes(num as any) ? prev.filter(n => n !== num) : [...prev, num as any]);
   };
 
-  const handleBingoClick = () => {
+  // --- 🏆 CLAIM WIN ---
+  const handleBingoClick = async () => {
     const win = checkBingoWin(cardMatrix, markedNumbers);
     const tg = window.Telegram?.WebApp;
+
     if (win) {
-      setBalance(balance + DERASH);
-      setWinInfo(win);
-      setGameState('ended');
+      if (!userId) return;
+
+      try {
+        // Call Backend to Claim Reward
+        const res = await fetch('/api/game/claim-win', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tid: userId, reward: DERASH })
+        });
+        
+        const result = await res.json();
+        
+        if (result.success) {
+           setBalance(balance + DERASH);
+           setWinInfo(win);
+           setGameState('ended');
+           tg?.HapticFeedback?.notificationOccurred('success');
+        } else {
+           tg?.showAlert("Win validation failed on server.");
+        }
+      } catch (e) {
+        tg?.showAlert("Connection error checking win.");
+      }
+
     } else {
       if (tg?.showAlert) tg.showAlert("No Bingo! Check your board.");
       else alert("No Bingo!");
+      tg?.HapticFeedback?.notificationOccurred('error');
     }
   };
 
@@ -114,7 +136,7 @@ const GameRoom: React.FC<GameRoomProps> = ({ onLeave, boardNumber, stake, balanc
                  {letters.map((l, i) => <div key={i} className={`${colors[i]} text-white text-[10px] font-black text-center rounded py-0.5`}>{l}</div>)}
               </div>
               <div className="grid grid-cols-5 gap-1.5 w-full aspect-square">
-                {/* FIX 2: Explicitly type the map parameters to fix implicit 'any' error */}
+                {/* --- FIX APPLIED: Added types for row, rIdx, val, cIdx --- */}
                 {cardMatrix.map((row: (string | number)[], rIdx: number) => row.map((val: string | number, cIdx: number) => {
                   const isMarked = markedNumbers.includes(val as any);
                   const isTrulyCalled = val === '*' || calledNumbers.includes(val as number);

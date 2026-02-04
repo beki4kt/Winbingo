@@ -49,7 +49,7 @@ const Lobby: React.FC<LobbyProps> = ({ onStartGame, selectedNumber, setSelectedN
   return (
     <div className={`flex flex-col h-full ${bgColor} animate-fadeIn transition-colors duration-500 overflow-hidden`}>
       
-      {/* 1-100 GRID - Made slightly smaller to give breathing room to the preview */}
+      {/* 1-100 GRID */}
       <div className="flex-1 px-4 py-2 flex flex-col justify-start items-center overflow-hidden">
         <div className={`${cardBg} p-1.5 rounded-xl border border-white/5 shadow-2xl w-full max-w-[320px]`}>
           <div className="grid grid-cols-10 gap-0.5 sm:gap-1 justify-items-center">
@@ -81,13 +81,14 @@ const Lobby: React.FC<LobbyProps> = ({ onStartGame, selectedNumber, setSelectedN
       {/* PREVIEW + START ACTIONS (BOTTOM) */}
       <div className="bg-transparent px-4 pb-20 shrink-0 flex flex-col gap-4">
         
-        {/* CARD PREVIEW SPACE - Expanded for more visibility */}
+        {/* CARD PREVIEW SPACE */}
         <div className="flex justify-center px-2 h-36 items-center">
           {selectedNumber ? (
             <div className={`w-32 h-32 ${isDarkMode ? 'bg-white/5' : 'bg-white/20'} rounded-2xl border-2 border-white/20 p-2 flex flex-col items-center justify-center shadow-2xl animate-scaleUp`}>
               <div className="h-full w-full flex flex-col">
                 <div className="flex-1 grid grid-cols-5 gap-0.5 bg-white p-1 rounded-md shadow-inner">
-                  {previewBoard?.flat().map((val, i) => (
+                  {/* Fixed Map Type */}
+                  {previewBoard?.flat().map((val: string | number, i: number) => (
                     <div key={i} className={`aspect-square flex items-center justify-center text-[7px] font-black rounded-[2px] ${val === '*' ? 'bg-orange-500 text-white' : 'bg-teal-50 text-teal-900'}`}>
                       {val === '*' ? '★' : val}
                     </div>

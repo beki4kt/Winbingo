@@ -1,202 +1,131 @@
 // server.ts
 console.log("🔄 server.ts is starting...");
 import express from 'express';
-import { Telegraf, Markup } from 'telegraf';
+import { Telegraf } from 'telegraf';
 import path from 'path';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import { PrismaClient } from '@prisma/client';
 import cors from 'cors';
-import crypto from 'crypto';
 dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const rootPath = path.join(__dirname, '../');
+// Fix for path resolution whether running via ts-node or node dist-server
+const rootPath = path.resolve(__dirname, '..');
 const prisma = new PrismaClient();
 const app = express();
 const port = process.env.PORT || 8080;
-app.use(express.json()); // Enable JSON body parsing for Admin API
+app.use(express.json());
 app.use(cors());
+// --- 🎮 GAME ENGINE (The "Live" Bingo Caller) ---
+// This runs on the server and generates numbers for everyone
+let globalGame = {
+    roomId: 'LIVE-ADDIS-1',
+    calledNumbers: [],
+    currentCall: null,
+    status: 'running',
+    nextCallTime: Date.now() + 4000
+};
+// Automatic Number Caller (Every 4 seconds)
+setInterval(() => {
+    if (globalGame.status === 'running') {
+        if (globalGame.calledNumbers.length >= 75) {
+            // Reset game if full
+            globalGame.calledNumbers = [];
+            globalGame.currentCall = null;
+        }
+        else {
+            let nextNum;
+            do {
+                nextNum = Math.floor(Math.random() * 75) + 1;
+            } while (globalGame.calledNumbers.includes(nextNum));
+            globalGame.calledNumbers.push(nextNum);
+            globalGame.currentCall = nextNum;
+        }
+    }
+}, 4000);
 const userStates = new Map();
-// --- 🎮 GAME ENGINE ---
-// ... (Game engine logic remains the same, keeping it concise for this snippet) ...
-let globalGame = { roomId: 'LIVE-1', calledNumbers: [], currentCall: null, status: 'running', nextCallTime: Date.now() + 5000 };
-setInterval(() => { }, 5000); // (Simplified for readability)
+const usedTransactionIds = new Set();
 // --- 🤖 BOT SETUP ---
 const botToken = process.env.BOT_TOKEN;
-if (!botToken)
-    console.error("❌ BOT_TOKEN is missing!");
 const bot = new Telegraf(botToken || '');
-const appUrl = process.env.APP_URL || 'https://your-app.fly.dev';
-async function getOrCreateUser(ctx) {
-    if (!ctx.from)
-        return null;
-    const telegramId = BigInt(ctx.from.id);
+const appUrl = process.env.APP_URL || 'https://winbingo.fly.dev';
+// --- COMMANDS ---
+const commands = [
+    { command: 'menu', description: '🏠 Main Menu' },
+    { command: 'play', description: '🎮 Play Game' },
+    { command: 'deposit', description: '➕ Deposit' },
+    { command: 'withdraw', description: '➖ Withdraw' },
+    { command: 'balance', description: '💰 Balance' }
+];
+// --- 🔌 API ENDPOINTS (The Bridge) ---
+// 1. Get User Data
+app.get('/api/user/:tid', async (req, res) => {
     try {
-        return await prisma.user.upsert({
-            where: { telegramId },
-            update: { username: ctx.from.username, firstName: ctx.from.first_name },
-            create: { telegramId, username: ctx.from.username, firstName: ctx.from.first_name }
+        const tid = BigInt(req.params.tid);
+        const user = await prisma.user.findUnique({ where: { telegramId: tid } });
+        if (!user)
+            return res.status(404).json({ error: "User not found" });
+        res.json({
+            username: user.username,
+            firstName: user.firstName,
+            balance: user.balance,
+            telegramId: user.telegramId.toString()
         });
     }
     catch (e) {
-        return null;
+        res.status(500).json({ error: "Server Error" });
     }
-}
-function generateReference() { return crypto.randomBytes(4).toString('hex').toUpperCase(); }
-const pendingTransactions = [];
-// API: Get All Pending
-app.get('/api/admin/transactions', (req, res) => {
-    // Simple Password Check (Add ?auth=admin123 to URL)
-    if (req.query.auth !== 'admin123')
-        return res.status(403).json({ error: "Unauthorized" });
-    res.json(pendingTransactions.filter(t => t.status === 'PENDING'));
 });
-// API: Approve/Reject
-app.post('/api/admin/action', async (req, res) => {
-    if (req.body.auth !== 'admin123')
-        return res.status(403).json({ error: "Unauthorized" });
-    const { id, action } = req.body;
-    const tx = pendingTransactions.find(t => t.id === id);
-    if (!tx)
-        return res.status(404).json({ error: "Transaction not found" });
-    tx.status = action === 'APPROVE' ? 'APPROVED' : 'REJECTED';
-    const user = await prisma.user.findUnique({ where: { telegramId: BigInt(tx.userId) } });
-    if (user) {
-        try {
-            if (action === 'APPROVE') {
-                // Update Balance
-                if (tx.type === 'DEPOSIT') {
-                    await prisma.user.update({ where: { id: user.id }, data: { balance: { increment: tx.amount } } });
-                    bot.telegram.sendMessage(tx.userId, `✅ **Deposit Approved!**\n\nYour balance has been credited with ${tx.amount} ETB.`, { parse_mode: 'Markdown' });
-                }
-                else {
-                    // Withdrawal balance was already deducted (optionally), or deduc NOW if you prefer.
-                    // For safety, usually deduct immediately upon request, or lock funds. 
-                    // Here assuming we deduct now:
-                    await prisma.user.update({ where: { id: user.id }, data: { balance: { decrement: tx.amount } } });
-                    bot.telegram.sendMessage(tx.userId, `✅ **Withdrawal Processed!**\n\nWe have sent ${tx.amount} ETB to ${tx.phone}.`, { parse_mode: 'Markdown' });
-                }
-            }
-            else {
-                // Reject
-                bot.telegram.sendMessage(tx.userId, `❌ **Transaction Rejected**\n\nYour ${tx.type.toLowerCase()} request for ${tx.amount} ETB was rejected. Contact support.`, { parse_mode: 'Markdown' });
-            }
-        }
-        catch (e) {
-            console.error("Transact Error", e);
-        }
-    }
-    res.json({ success: true });
-});
-// --- 🤖 BOT HANDLERS (Updated to push to Admin List) ---
-const dashboardMenu = Markup.inlineKeyboard([
-    [Markup.button.webApp('Play / ይጫወቱ 🎮', appUrl), Markup.button.callback('Register / ይመዝገቡ 📝', 'register_check')],
-    [Markup.button.callback('Check Balance / ሂሳብ 💰', 'balance'), Markup.button.callback('Deposit / ገቢ 💵', 'deposit_start')],
-    [Markup.button.callback('Withdraw / ወጪ 🏦', 'withdraw_start')],
-    [Markup.button.callback('Support / እርዳታ 📞', 'support'), Markup.button.callback('Instruction / መመሪያ 📖', 'instruction')],
-]);
-const cancelKeyboard = Markup.keyboard([['❌ Cancel / ሰርዝ']]).resize();
-// ... (Start, Contact, Menu handlers same as before) ...
-bot.start(async (ctx) => {
+// 2. Buy Ticket
+app.post('/api/game/buy-ticket', async (req, res) => {
+    const { tid, price } = req.body;
     try {
-        await ctx.setChatMenuButton({ type: 'commands' });
-    }
-    catch (e) { }
-    const user = await getOrCreateUser(ctx);
-    if (!user || !user.isRegistered)
-        return ctx.reply("Please register first.", Markup.keyboard([[Markup.button.contactRequest('📱 Share Contact')]]).resize().oneTime());
-    ctx.replyWithPhoto({ source: path.join(rootPath, 'win.png') }, { caption: "🏆 Win Bingo Menu", ...dashboardMenu });
-});
-bot.on('contact', async (ctx) => { });
-// --- DEPOSIT FLOW ---
-bot.action('deposit_start', (ctx) => {
-    ctx.reply("Choose Method:", Markup.inlineKeyboard([[Markup.button.callback('Manual (Telebirr/CBE)', 'dep_manual')]]));
-});
-bot.action('dep_manual', (ctx) => {
-    if (!ctx.from)
-        return;
-    userStates.set(ctx.from.id.toString(), { step: 'DEPOSIT_AMOUNT', data: {} });
-    ctx.reply("Enter Amount (ETB):", cancelKeyboard);
-});
-// --- WITHDRAW FLOW ---
-bot.action('withdraw_start', (ctx) => {
-    if (!ctx.from)
-        return;
-    userStates.set(ctx.from.id.toString(), { step: 'WITHDRAW_AMOUNT', data: {} });
-    ctx.reply("Enter Amount to Withdraw:", cancelKeyboard);
-});
-// --- TEXT HANDLER ---
-bot.on('text', async (ctx) => {
-    if (!ctx.from)
-        return;
-    const uid = ctx.from.id.toString();
-    const text = ctx.message.text;
-    const state = userStates.get(uid);
-    if (text.includes('Cancel')) {
-        userStates.delete(uid);
-        return ctx.reply("Cancelled", Markup.removeKeyboard());
-    }
-    if (!state)
-        return;
-    // DEPOSIT STEPS
-    if (state.step === 'DEPOSIT_AMOUNT') {
-        const amount = parseFloat(text);
-        if (isNaN(amount) || amount < 5)
-            return ctx.reply("Invalid Amount.");
-        const ref = generateReference();
-        userStates.set(uid, { step: 'DEPOSIT_CONFIRM', data: { amount, ref } });
-        // Show Instructions
-        ctx.reply(`**Deposit Request**\nAmount: ${amount}\nRef: ${ref}\n\n1. Transfer ${amount} to 0924497619\n2. **Paste the SMS here** to confirm.`, { parse_mode: 'Markdown' });
-    }
-    else if (state.step === 'DEPOSIT_CONFIRM') {
-        // SAVE TO PENDING LIST
-        pendingTransactions.push({
-            id: generateReference(),
-            userId: uid,
-            username: ctx.from.username || 'Unknown',
-            type: 'DEPOSIT',
-            amount: state.data.amount,
-            ref: state.data.ref,
-            sms: text, // The user pasted SMS
-            status: 'PENDING',
-            date: new Date()
+        const user = await prisma.user.findUnique({ where: { telegramId: BigInt(tid) } });
+        if (!user || user.balance < price) {
+            return res.status(400).json({ success: false, message: "Insufficient Balance" });
+        }
+        await prisma.user.update({
+            where: { id: user.id },
+            data: { balance: { decrement: price } }
         });
-        ctx.reply("✅ **Request Sent to Admin!**\nWait for approval.", Markup.removeKeyboard());
-        userStates.delete(uid);
+        res.json({ success: true, newBalance: user.balance - price });
     }
-    // WITHDRAW STEPS
-    else if (state.step === 'WITHDRAW_AMOUNT') {
-        const amount = parseFloat(text);
-        userStates.set(uid, { step: 'WITHDRAW_PHONE', data: { amount } });
-        ctx.reply("Enter Phone Number:", cancelKeyboard);
-    }
-    else if (state.step === 'WITHDRAW_PHONE') {
-        // SAVE TO PENDING LIST
-        pendingTransactions.push({
-            id: generateReference(),
-            userId: uid,
-            username: ctx.from.username || 'Unknown',
-            type: 'WITHDRAW',
-            amount: state.data.amount,
-            phone: text,
-            status: 'PENDING',
-            date: new Date()
-        });
-        ctx.reply("✅ **Withdrawal Requested!**\nWait for approval.", Markup.removeKeyboard());
-        userStates.delete(uid);
+    catch (e) {
+        res.status(500).json({ error: "Transaction Failed" });
     }
 });
-// --- SERVER SETUP ---
+// 3. Claim Win
+app.post('/api/game/claim-win', async (req, res) => {
+    const { tid, reward } = req.body;
+    try {
+        await prisma.user.update({
+            where: { telegramId: BigInt(tid) },
+            data: { balance: { increment: reward } }
+        });
+        res.json({ success: true });
+    }
+    catch (e) {
+        res.status(500).json({ error: "Error processing win" });
+    }
+});
+// 4. Game Sync (Frontend calls this to get numbers)
+app.get('/api/game/sync', (req, res) => {
+    res.json(globalGame);
+});
+// --- SERVE MINI APP ---
 const distPath = path.join(__dirname, '../dist');
 app.use(express.static(distPath));
-// ADMIN PANEL ROUTE (Serve the HTML file)
-app.get('/admin', (req, res) => {
-    res.sendFile(path.join(__dirname, '../admin.html'));
+app.get('*', (req, res) => res.sendFile(path.join(distPath, 'index.html')));
+// --- START SERVER ---
+app.listen(Number(port), '0.0.0.0', () => {
+    console.log(`✅ Server running on ${port}`);
+    if (botToken) {
+        bot.telegram.setMyCommands(commands);
+        bot.launch().catch(e => console.error("Bot failed:", e));
+    }
 });
-// Existing APIs
-app.get('/api/game/sync', (req, res) => res.json(globalGame));
-app.get('/api/user', async (req, res) => { });
-bot.launch();
-app.listen(port, () => console.log(`🚀 Server running on ${port}`));
+// --- HELPER FUNCTIONS ---
+function verifyPaymentSMS(text, expectedAmount) { /* (Keep your existing verify function) */ return { valid: false }; }
+async function getOrCreateUser(ctx) { }
