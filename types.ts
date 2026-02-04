@@ -1,4 +1,3 @@
-
 export enum View {
   LOBBY = 'GAME',
   SCORES = 'SCORES',
@@ -6,7 +5,7 @@ export enum View {
   WALLET = 'WALLET',
   PROFILE = 'PROFILE',
   ACTIVE_GAME = 'ACTIVE_GAME',
-  ADMIN = 'ADMIN'
+  ADMIN = 'ADMIN' // <--- This line was missing or not saved!
 }
 
 export interface Player {
@@ -29,10 +28,6 @@ export interface BingoSquare {
   isMarked: boolean;
 }
 
-/**
- * Global augmentation for Telegram WebApp SDK to fix window property errors.
- * This ensures that window.Telegram is recognized by the TypeScript compiler throughout the project.
- */
 declare global {
   interface Window {
     Telegram?: any;

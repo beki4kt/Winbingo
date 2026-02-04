@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 
 interface ProfileProps {
   user: any;
@@ -9,6 +9,19 @@ interface ProfileProps {
 
 const Profile: React.FC<ProfileProps> = ({ user, balance, coins, isDarkMode }) => {
   const bg = isDarkMode ? 'bg-slate-800' : 'bg-white/10';
+  const [role, setRole] = useState('Player');
+
+  // Check role on load
+  useEffect(() => {
+      const checkRole = async () => {
+          if(user?.id) {
+              const res = await fetch(`/api/user/${user.id}`);
+              const data = await res.json();
+              if(data.isAdmin) setRole('SUPER ADMIN');
+          }
+      };
+      checkRole();
+  }, [user]);
   
   return (
     <div className="p-8 text-white text-center animate-fadeIn h-full overflow-y-auto pb-32">
@@ -20,7 +33,12 @@ const Profile: React.FC<ProfileProps> = ({ user, balance, coins, isDarkMode }) =
         )}
       </div>
       <h2 className="text-2xl font-black mb-1">{user?.first_name || 'Win Player'}</h2>
-      <p className="text-white/60 text-xs mb-6 font-bold uppercase tracking-widest">ID: {user?.id || '---'}</p>
+      <p className="text-white/60 text-xs mb-2 font-bold uppercase tracking-widest">ID: {user?.id || '---'}</p>
+      
+      {/* 🛡️ ROLE BADGE */}
+      <div className={`inline-block px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest mb-6 ${role === 'SUPER ADMIN' ? 'bg-red-600 text-white' : 'bg-emerald-500/20 text-emerald-400'}`}>
+          {role}
+      </div>
       
       <div className={`${bg} rounded-3xl p-6 text-left space-y-4 shadow-inner border border-white/5`}>
         <div className="flex justify-between items-center pb-4 border-b border-white/5">
