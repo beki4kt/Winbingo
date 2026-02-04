@@ -9,15 +9,28 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Define what a "User" is in our system
 model User {
-  id           Int      @id @default(autoincrement())
-  telegramId   BigInt   @unique
+  id           String        @id @default(cuid())
+  telegramId   BigInt        @unique
   username     String?
   firstName    String?
-  isRegistered Boolean  @default(false)
   phoneNumber  String?
-  balance      Float    @default(0.00)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  isRegistered Boolean       @default(false)
+  balance      Float         @default(0.0)
+  coins        Int           @default(0) // <-- New Coin Balance
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  history      GameHistory[] // Relation to history
+}
+
+// New Model for History
+model GameHistory {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  roomId    String
+  stake     Float
+  result    String   // "WIN" or "LOSS"
+  amount    Float    // Amount won or lost (stake)
+  date      DateTime @default(now())
 }

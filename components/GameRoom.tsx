@@ -5,14 +5,13 @@ interface GameRoomProps {
   onLeave: () => void;
   boardNumber: number;
   stake: number;
-  balance: number;
-  setBalance: (bal: number) => void;
   roomId: string;
   isDarkMode: boolean;
   userId: string | null;
+  refreshUserData: () => void;
 }
 
-const GameRoom: React.FC<GameRoomProps> = ({ onLeave, boardNumber, stake, balance, setBalance, roomId, isDarkMode, userId }) => {
+const GameRoom: React.FC<GameRoomProps> = ({ onLeave, boardNumber, stake, roomId, isDarkMode, userId, refreshUserData }) => {
   const [gameState, setGameState] = useState<'waiting' | 'starting' | 'running' | 'ended'>('waiting');
   const [currentCall, setCurrentCall] = useState<number | null>(null);
   const [calledNumbers, setCalledNumbers] = useState<number[]>([]);
@@ -24,27 +23,21 @@ const GameRoom: React.FC<GameRoomProps> = ({ onLeave, boardNumber, stake, balanc
   const DERASH = (stake * PLAYER_COUNT) * 0.8;
   const cardMatrix = useMemo(() => generateFairBoard(boardNumber), [boardNumber]);
 
-  // --- 📡 MULTIPLAYER SYNC ---
   useEffect(() => {
     const interval = setInterval(async () => {
       try {
         const res = await fetch('/api/game/sync');
         const data = await res.json();
-        
         if (data) {
            setCalledNumbers(data.calledNumbers || []);
            setCurrentCall(data.currentCall);
            setServerRoomId(data.roomId);
-           
            if (data.status === 'running' && gameState !== 'running' && gameState !== 'ended') {
              setGameState('running');
            }
         }
-      } catch (err) {
-        console.error("Sync error:", err);
-      }
+      } catch (err) { console.error(err); }
     }, 1000);
-
     return () => clearInterval(interval);
   }, [gameState]);
 
@@ -53,41 +46,42 @@ const GameRoom: React.FC<GameRoomProps> = ({ onLeave, boardNumber, stake, balanc
     setMarkedNumbers(prev => prev.includes(num as any) ? prev.filter(n => n !== num) : [...prev, num as any]);
   };
 
-  // --- 🏆 CLAIM WIN ---
   const handleBingoClick = async () => {
     const win = checkBingoWin(cardMatrix, markedNumbers);
-    const tg = window.Telegram?.WebApp;
-
     if (win) {
       if (!userId) return;
-
       try {
-        // Call Backend to Claim Reward
         const res = await fetch('/api/game/claim-win', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tid: userId, reward: DERASH })
+          body: JSON.stringify({ tid: userId, reward: DERASH, roomId })
         });
-        
         const result = await res.json();
-        
         if (result.success) {
-           setBalance(balance + DERASH);
+           refreshUserData(); // Update balance in App
            setWinInfo(win);
            setGameState('ended');
-           tg?.HapticFeedback?.notificationOccurred('success');
-        } else {
-           tg?.showAlert("Win validation failed on server.");
+           window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success');
         }
-      } catch (e) {
-        tg?.showAlert("Connection error checking win.");
-      }
-
+      } catch (e) { alert("Error"); }
     } else {
-      if (tg?.showAlert) tg.showAlert("No Bingo! Check your board.");
-      else alert("No Bingo!");
-      tg?.HapticFeedback?.notificationOccurred('error');
+      window.Telegram?.WebApp?.showAlert("No Bingo! Check your board.");
     }
+  };
+
+  // Record Loss automatically if user leaves or game resets (simplified for now)
+  const handleLeave = async () => {
+      if(gameState !== 'ended' && userId) {
+          // Record Loss if leaving mid-game
+          try {
+              await fetch('/api/game/record-loss', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ tid: userId, roomId, stake })
+              });
+          } catch(e) {}
+      }
+      onLeave();
   };
 
   const letters = ['B', 'I', 'N', 'G', 'O'];
@@ -96,16 +90,13 @@ const GameRoom: React.FC<GameRoomProps> = ({ onLeave, boardNumber, stake, balanc
 
   return (
     <div className={`flex flex-col h-full ${containerBg} overflow-hidden animate-fadeIn pb-safe`}>
-      {/* TASKBAR */}
       <div className="px-3 pt-3 pb-2 flex gap-1.5 justify-between shrink-0">
         <div className="bg-white rounded-lg p-1 flex-1 text-center"><span className="text-[7px] text-emerald-600 font-bold block">ROOM</span><span className="text-[10px] font-black">{serverRoomId || '...'}</span></div>
         <div className="bg-white rounded-lg p-1 flex-1 text-center"><span className="text-[7px] text-emerald-600 font-bold block">POT</span><span className="text-[10px] font-black">{DERASH.toFixed(0)}</span></div>
         <div className="bg-white rounded-lg p-1 flex-1 text-center"><span className="text-[7px] text-emerald-600 font-bold block">CALLED</span><span className="text-[10px] font-black">{calledNumbers.length}</span></div>
       </div>
 
-      {/* GAME AREA */}
       <div className="flex-1 flex px-3 gap-3 overflow-hidden">
-        {/* LEFT: MASTER BOARD */}
         <div className="w-[130px] bg-black/40 rounded-2xl p-2 flex flex-col border border-white/10 overflow-hidden">
            <div className="flex-1 grid grid-cols-5 gap-1 overflow-y-auto custom-scrollbar content-start">
               {Array.from({ length: 75 }).map((_, i) => {
@@ -120,9 +111,7 @@ const GameRoom: React.FC<GameRoomProps> = ({ onLeave, boardNumber, stake, balanc
            </div>
         </div>
 
-        {/* RIGHT: CALLER & CARD */}
         <div className="flex-1 flex flex-col gap-3 overflow-hidden">
-           {/* CALLER DISPLAY */}
            <div className="bg-emerald-900/40 rounded-2xl p-3 flex justify-between items-center border border-white/10 h-20">
               <span className="text-[10px] font-black text-white/60 uppercase">Last Call</span>
               <div className="w-14 h-14 bg-orange-500 rounded-full flex items-center justify-center text-white text-3xl font-black shadow-lg border-4 border-white/20">
@@ -130,13 +119,11 @@ const GameRoom: React.FC<GameRoomProps> = ({ onLeave, boardNumber, stake, balanc
               </div>
            </div>
 
-           {/* PLAYER CARD */}
            <div className={`${isDarkMode ? 'bg-white/5' : 'bg-white/30'} rounded-[2rem] p-3 border-2 border-white/10 shadow-2xl`}>
               <div className="grid grid-cols-5 gap-1 mb-2">
                  {letters.map((l, i) => <div key={i} className={`${colors[i]} text-white text-[10px] font-black text-center rounded py-0.5`}>{l}</div>)}
               </div>
               <div className="grid grid-cols-5 gap-1.5 w-full aspect-square">
-                {/* --- FIX APPLIED: Added types for row, rIdx, val, cIdx --- */}
                 {cardMatrix.map((row: (string | number)[], rIdx: number) => row.map((val: string | number, cIdx: number) => {
                   const isMarked = markedNumbers.includes(val as any);
                   const isTrulyCalled = val === '*' || calledNumbers.includes(val as number);
@@ -161,24 +148,20 @@ const GameRoom: React.FC<GameRoomProps> = ({ onLeave, boardNumber, stake, balanc
         </div>
       </div>
 
-      {/* FOOTER */}
       <div className="px-5 py-5 shrink-0 flex flex-col gap-3 bg-black/10 backdrop-blur border-t border-white/5">
         <button onClick={handleBingoClick} className="w-full py-4 bg-orange-600 text-white rounded-2xl font-black text-2xl uppercase shadow-lg active:scale-95">BINGO!</button>
-        <button onClick={onLeave} className="w-full py-3 bg-red-500/80 text-white rounded-xl font-bold text-xs uppercase">Leave Game</button>
+        <button onClick={handleLeave} className="w-full py-3 bg-red-500/80 text-white rounded-xl font-bold text-xs uppercase">Leave Game</button>
       </div>
 
-      {/* WIN OVERLAY */}
       {gameState === 'ended' && (
         <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-8 backdrop-blur-xl">
            <div className="text-center text-white">
               <h2 className="text-4xl font-black text-yellow-400 mb-4">{winInfo ? 'YOU WON!' : 'GAME OVER'}</h2>
-              <p className="mb-8 opacity-60 uppercase font-bold tracking-widest text-xs">Waiting for next round...</p>
-              <button onClick={onLeave} className="px-8 py-3 bg-white text-black font-black rounded-full uppercase">Main Menu</button>
+              <button onClick={handleLeave} className="px-8 py-3 bg-white text-black font-black rounded-full uppercase">Main Menu</button>
            </div>
         </div>
       )}
     </div>
   );
 };
-
 export default GameRoom;

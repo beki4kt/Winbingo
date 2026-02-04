@@ -1,62 +1,70 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 interface WalletProps {
   balance: number;
-  setBalance: (bal: number) => void;
-  // Added isDarkMode to resolve TypeScript error in App.tsx
+  coins: number;
+  userId: string | null;
+  refreshData: () => void;
   isDarkMode: boolean;
 }
 
-const Wallet: React.FC<WalletProps> = ({ balance, setBalance, isDarkMode }) => {
-  const depositAmounts = [10, 50, 100, 500];
+const Wallet: React.FC<WalletProps> = ({ balance, coins, userId, refreshData, isDarkMode }) => {
+  const [loading, setLoading] = useState(false);
+  const bg = isDarkMode ? 'bg-slate-800' : 'bg-white/10';
 
-  // Updated background to respect dark mode theme
+  const handleExchange = async () => {
+      if(coins < 100) return alert("Need 100 coins minimum!");
+      setLoading(true);
+      try {
+          const res = await fetch('/api/wallet/exchange', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({ tid: userId })
+          });
+          const d = await res.json();
+          if(d.success) {
+              alert("Exchanged 100 Coins for 10 ETB!");
+              refreshData();
+          } else {
+              alert(d.message);
+          }
+      } catch(e) { alert("Error"); }
+      setLoading(false);
+  };
+
   return (
-    <div className={`p-6 text-white pb-32 ${isDarkMode ? 'bg-[#0f172a]' : 'bg-[#065f46]'} min-h-full transition-colors duration-500`}>
-      <div className="bg-white/5 backdrop-blur-md p-10 rounded-[3rem] text-center mb-8 border border-white/10">
-        <h3 className="text-white/30 text-xs mb-2 font-black uppercase tracking-[0.3em]">Vault Balance</h3>
-        <p className="text-6xl font-black mb-1 leading-none tracking-tighter text-white">{balance.toFixed(2)}</p>
-        <p className="text-[10px] text-orange-500 font-black uppercase tracking-widest mt-2">ETB Credits</p>
+    <div className="p-6 h-full overflow-y-auto pb-32 animate-fadeIn text-white">
+      <div className={`${bg} rounded-3xl p-6 shadow-xl border border-white/5 mb-6`}>
+         <div className="text-xs font-bold opacity-60 uppercase mb-1">Total Balance</div>
+         <div className="text-4xl font-black mb-6">{balance.toFixed(2)} ETB</div>
+         
+         <div className="flex gap-3">
+             <button onClick={() => window.Telegram?.WebApp?.openTelegramLink('https://t.me/WinBingoBot')} className="flex-1 bg-emerald-500 py-3 rounded-xl font-bold text-sm shadow-lg active:scale-95">Deposit</button>
+             <button onClick={() => window.Telegram?.WebApp?.openTelegramLink('https://t.me/WinBingoBot')} className="flex-1 bg-white/10 py-3 rounded-xl font-bold text-sm shadow-lg active:scale-95">Withdraw</button>
+         </div>
+         <p className="text-[10px] text-center mt-3 opacity-50">Transactions are handled by the Bot</p>
       </div>
 
-      <h3 className="text-xs font-black mb-4 uppercase tracking-widest text-white/40 px-2">Instant Refill</h3>
-      <div className="grid grid-cols-2 gap-3 mb-8">
-        {depositAmounts.map(amt => (
+      <div className={`${bg} rounded-3xl p-6 shadow-xl border border-white/5`}>
+          <div className="flex justify-between items-center mb-4">
+             <div>
+                 <div className="text-xs font-bold opacity-60 uppercase">Win Coins</div>
+                 <div className="text-2xl font-black text-yellow-400">{coins}</div>
+             </div>
+             <div className="w-10 h-10 bg-yellow-400 rounded-full flex items-center justify-center text-yellow-900 font-black">C</div>
+          </div>
+          
+          <div className="text-xs opacity-70 mb-4">Exchange 100 Coins for 10 ETB wallet balance.</div>
+          
           <button 
-            key={amt}
-            onClick={() => setBalance(balance + amt)}
-            className="bg-white/5 hover:bg-white/10 border border-white/10 py-5 rounded-3xl font-black transition-all active:scale-95 text-xs text-white uppercase tracking-tighter"
+            onClick={handleExchange}
+            disabled={coins < 100 || loading}
+            className={`w-full py-3 rounded-xl font-bold text-sm shadow-lg ${coins < 100 ? 'bg-gray-600 opacity-50' : 'bg-yellow-500 text-yellow-900 active:scale-95'}`}
           >
-            +{amt} ETB
+             {loading ? 'Exchanging...' : 'Exchange (100 C -> 10 ETB)'}
           </button>
-        ))}
-      </div>
-
-      <button className="w-full bg-orange-500 py-5 rounded-[2rem] font-black text-sm shadow-2xl mb-8 transition-transform active:scale-95 uppercase tracking-widest text-white">
-        Cash-Out Funds
-      </button>
-
-      <div className="bg-white/5 p-6 rounded-[2.5rem] border border-white/5">
-        <h4 className="font-black text-[9px] mb-5 text-white/20 uppercase tracking-[0.3em]">Ledger History</h4>
-        <div className="space-y-5">
-          <div className="flex justify-between items-center">
-            <div className="flex flex-col">
-              <span className="font-black text-xs uppercase tracking-tighter">Telebirr Payout</span>
-              <span className="text-[8px] text-white/20 font-bold uppercase mt-0.5">Oct 26, 11:42 PM</span>
-            </div>
-            <span className="text-orange-500 font-black text-xs">-50.00</span>
-          </div>
-          <div className="flex justify-between items-center">
-            <div className="flex flex-col">
-              <span className="font-black text-xs uppercase tracking-tighter">Chapa Deposit</span>
-              <span className="text-[8px] text-white/20 font-bold uppercase mt-0.5">Oct 25, 04:15 AM</span>
-            </div>
-            <span className="text-green-500 font-black text-xs">+100.00</span>
-          </div>
-        </div>
       </div>
     </div>
   );
 };
-
 export default Wallet;
