@@ -12,6 +12,14 @@ const Wallet: React.FC<WalletProps> = ({ balance, coins, userId, refreshData, is
   const [loading, setLoading] = useState(false);
   const bg = isDarkMode ? 'bg-slate-800' : 'bg-white/10';
 
+  // --- 🔗 LINK TO YOUR BOT ---
+  // This function opens your bot and sends a "start" command with a parameter
+  const openBotCommand = (command: string) => {
+      // Replace 'WinBingoBot' with your EXACT bot username if different
+      const botUsername = "WinBingoBot"; 
+      window.Telegram?.WebApp?.openTelegramLink(`https://t.me/${botUsername}?start=${command}`);
+  };
+
   const handleExchange = async () => {
       if(coins < 100) return alert("Need 100 coins minimum!");
       setLoading(true);
@@ -39,10 +47,11 @@ const Wallet: React.FC<WalletProps> = ({ balance, coins, userId, refreshData, is
          <div className="text-4xl font-black mb-6">{balance.toFixed(2)} ETB</div>
          
          <div className="flex gap-3">
-             <button onClick={() => window.Telegram?.WebApp?.openTelegramLink('https://t.me/WinBingoBot')} className="flex-1 bg-emerald-500 py-3 rounded-xl font-bold text-sm shadow-lg active:scale-95">Deposit</button>
-             <button onClick={() => window.Telegram?.WebApp?.openTelegramLink('https://t.me/WinBingoBot')} className="flex-1 bg-white/10 py-3 rounded-xl font-bold text-sm shadow-lg active:scale-95">Withdraw</button>
+             {/* 👇 UPDATED BUTTONS TO REDIRECT TO YOUR BOT */}
+             <button onClick={() => openBotCommand('deposit')} className="flex-1 bg-emerald-500 py-3 rounded-xl font-bold text-sm shadow-lg active:scale-95">Deposit</button>
+             <button onClick={() => openBotCommand('withdraw')} className="flex-1 bg-white/10 py-3 rounded-xl font-bold text-sm shadow-lg active:scale-95">Withdraw</button>
          </div>
-         <p className="text-[10px] text-center mt-3 opacity-50">Transactions are handled by the Bot</p>
+         <p className="text-[10px] text-center mt-3 opacity-50">You will be redirected to the bot to complete the transaction.</p>
       </div>
 
       <div className={`${bg} rounded-3xl p-6 shadow-xl border border-white/5`}>
