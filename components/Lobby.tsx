@@ -32,20 +32,20 @@ const Lobby: React.FC<LobbyProps> = ({ onBoardSelect, selectedNumber, setSelecte
   return (
     <div className={`flex flex-col h-[100dvh] w-full ${bgColor} animate-fadeIn transition-colors duration-500 overflow-hidden`}>
       
-      {/* Top Section: 1-100 Grid Area (Dynamically constrained so it cannot scroll) */}
-      <div className="flex-1 px-2 py-2 flex flex-col justify-center items-center min-h-0 overflow-hidden">
-        <div className={`${cardBg} p-1 rounded-xl border border-white/5 shadow-2xl h-full max-h-[400px] aspect-square flex flex-col`}>
-          <div className="grid grid-cols-10 grid-rows-10 gap-0.5 sm:gap-1 w-full h-full">
+      {/* Top Section: Tightly Packed 1-100 Grid */}
+      <div className="flex-1 px-2 flex items-center justify-center min-h-0 overflow-hidden">
+        <div className={`${cardBg} p-1 rounded-lg border border-white/5 shadow-2xl w-full max-w-[360px] aspect-square`}>
+          <div className="grid grid-cols-10 grid-rows-10 gap-[1px] w-full h-full">
             {numbers.map((num) => {
               const isActive = selectedNumber === num;
               return (
                 <button
                   key={num}
                   onClick={() => setSelectedNumber(num)}
-                  className={`w-full h-full rounded-[2px] sm:rounded-md text-[9px] sm:text-[10px] font-black flex items-center justify-center transition-all border-b ${
-                    isActive ? 'bg-green-500 text-white border-green-700 scale-110 z-10 shadow-md' : 
-                    otherPicks.includes(num) ? 'bg-orange-500 text-white border-orange-700 opacity-90' : 
-                    isDarkMode ? 'bg-white/5 text-white/40 border-white/5' : 'bg-white/20 text-white/60 border-white/10'
+                  className={`w-full h-full rounded-[1px] text-[8px] sm:text-[9px] font-black flex items-center justify-center transition-all ${
+                    isActive ? 'bg-green-500 text-white scale-110 z-10 shadow-md border-b border-green-700' : 
+                    otherPicks.includes(num) ? 'bg-orange-500 text-white opacity-90' : 
+                    isDarkMode ? 'bg-white/5 text-white/40' : 'bg-white/20 text-white/60'
                   }`}
                 >
                   {num}
@@ -56,24 +56,28 @@ const Lobby: React.FC<LobbyProps> = ({ onBoardSelect, selectedNumber, setSelecte
         </div>
       </div>
 
-      {/* Bottom Section: Preview & Start Game (Tightly packed to stay on screen) */}
-      <div className="bg-transparent px-4 pb-6 sm:pb-8 shrink-0 flex flex-col gap-2">
-        <div className="flex justify-center h-24 items-center">
+      {/* Bottom Section: Shrunk Preview & Start Game Button */}
+      <div className="shrink-0 px-4 pb-4 sm:pb-6 flex flex-col gap-2 items-center justify-end">
+        <div className="flex justify-center items-center h-[70px]">
            {previewBoard ? (
-             <div className="w-20 h-20 bg-white p-1 rounded grid grid-cols-5 gap-[1px] shadow-inner">
+             <div className="w-[64px] h-[64px] bg-white p-[2px] rounded grid grid-cols-5 gap-[1px] shadow-inner">
                 {previewBoard.flat().map((v, i) => (
-                    <div key={i} className={`flex items-center justify-center text-[5px] sm:text-[6px] font-black rounded-[1px] ${v === '*' ? 'bg-orange-500 text-white' : 'bg-teal-50 text-teal-900'}`}>
+                    <div key={i} className={`flex items-center justify-center text-[5px] font-black rounded-[1px] ${v === '*' ? 'bg-orange-500 text-white' : 'bg-teal-50 text-teal-900'}`}>
                       {v === '*' ? '★' : v}
                     </div>
                 ))}
              </div>
-           ) : <div className="text-white/40 text-[10px] sm:text-xs font-bold uppercase tracking-widest">Select a Board</div>}
+           ) : (
+             <div className="text-white/40 text-[10px] font-bold uppercase tracking-widest text-center">
+               Select<br/>Board
+             </div>
+           )}
         </div>
 
         <button 
           onClick={() => selectedNumber && onBoardSelect(selectedNumber)}
           disabled={!selectedNumber}
-          className={`w-full py-3 sm:py-4 rounded-xl font-black uppercase tracking-widest shadow-lg active:scale-95 transition-transform ${!selectedNumber ? 'bg-gray-500 opacity-50' : 'bg-orange-500 text-white'}`}
+          className={`w-full max-w-[360px] py-2.5 sm:py-3 rounded-xl font-black uppercase tracking-widest shadow-lg active:scale-95 transition-transform text-sm ${!selectedNumber ? 'bg-gray-500 opacity-50' : 'bg-orange-500 text-white'}`}
         >
           Start Game
         </button>
