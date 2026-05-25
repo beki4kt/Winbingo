@@ -30,11 +30,13 @@ const Lobby: React.FC<LobbyProps> = ({ onBoardSelect, selectedNumber, setSelecte
   const cardBg = isDarkMode ? 'bg-white/5' : 'bg-white/10';
 
   return (
-    <div className={`flex flex-col h-[100dvh] w-full ${bgColor} animate-fadeIn transition-colors duration-500 overflow-hidden`}>
+    <div className={`flex flex-col h-[100dvh] w-full ${bgColor} overflow-hidden`}>
       
-      {/* Top Section: Tightly Packed 1-100 Grid */}
-      <div className="flex-1 px-2 flex items-center justify-center min-h-0 overflow-hidden">
-        <div className={`${cardBg} p-1 rounded-lg border border-white/5 shadow-2xl w-full max-w-[360px] aspect-square`}>
+      {/* TOP SECTION: 1-100 GRID 
+        Strictly contained to never push the screen bounds.
+      */}
+      <div className="flex-1 flex items-center justify-center p-2 min-h-0">
+        <div className={`${cardBg} p-1 rounded-lg border border-white/5 shadow-2xl w-full max-w-[400px] aspect-square flex flex-col`}>
           <div className="grid grid-cols-10 grid-rows-10 gap-[1px] w-full h-full">
             {numbers.map((num) => {
               const isActive = selectedNumber === num;
@@ -42,10 +44,10 @@ const Lobby: React.FC<LobbyProps> = ({ onBoardSelect, selectedNumber, setSelecte
                 <button
                   key={num}
                   onClick={() => setSelectedNumber(num)}
-                  className={`w-full h-full rounded-[1px] text-[8px] sm:text-[9px] font-black flex items-center justify-center transition-all ${
-                    isActive ? 'bg-green-500 text-white scale-110 z-10 shadow-md border-b border-green-700' : 
-                    otherPicks.includes(num) ? 'bg-orange-500 text-white opacity-90' : 
-                    isDarkMode ? 'bg-white/5 text-white/40' : 'bg-white/20 text-white/60'
+                  className={`w-full h-full text-[10px] font-black flex items-center justify-center ${
+                    isActive ? 'bg-green-500 text-white scale-[1.15] z-10 shadow-lg border-b-2 border-green-700 rounded-sm' : 
+                    otherPicks.includes(num) ? 'bg-orange-500 text-white opacity-90 rounded-[1px]' : 
+                    isDarkMode ? 'bg-white/5 text-white/40 rounded-[1px]' : 'bg-white/20 text-white/60 rounded-[1px]'
                   }`}
                 >
                   {num}
@@ -56,11 +58,16 @@ const Lobby: React.FC<LobbyProps> = ({ onBoardSelect, selectedNumber, setSelecte
         </div>
       </div>
 
-      {/* Bottom Section: Shrunk Preview & Start Game Button */}
-      <div className="shrink-0 px-4 pb-4 sm:pb-6 flex flex-col gap-2 items-center justify-end">
-        <div className="flex justify-center items-center h-[70px]">
+      {/* BOTTOM SECTION: SIDE-BY-SIDE CONTROLS
+        Putting the preview and button horizontally saves vertical space 
+        and creates a 100% unscrollable structural alignment.
+      */}
+      <div className="h-[90px] shrink-0 flex items-center justify-between px-4 pb-6 gap-4">
+        
+        {/* MINI PREVIEW (Pinned to the Left) */}
+        <div className="w-[60px] h-[60px] shrink-0 flex items-center justify-center bg-black/20 rounded-md p-1 border border-white/10">
            {previewBoard ? (
-             <div className="w-[64px] h-[64px] bg-white p-[2px] rounded grid grid-cols-5 gap-[1px] shadow-inner">
+             <div className="w-full h-full bg-white p-[1px] rounded-[3px] grid grid-cols-5 gap-[1px]">
                 {previewBoard.flat().map((v, i) => (
                     <div key={i} className={`flex items-center justify-center text-[5px] font-black rounded-[1px] ${v === '*' ? 'bg-orange-500 text-white' : 'bg-teal-50 text-teal-900'}`}>
                       {v === '*' ? '★' : v}
@@ -68,21 +75,20 @@ const Lobby: React.FC<LobbyProps> = ({ onBoardSelect, selectedNumber, setSelecte
                 ))}
              </div>
            ) : (
-             <div className="text-white/40 text-[10px] font-bold uppercase tracking-widest text-center">
-               Select<br/>Board
-             </div>
+             <span className="text-white/40 text-[8px] font-bold text-center leading-tight">NO<br/>BOARD</span>
            )}
         </div>
 
+        {/* START BUTTON (Pinned to the Right, stretches to fill) */}
         <button 
           onClick={() => selectedNumber && onBoardSelect(selectedNumber)}
           disabled={!selectedNumber}
-          className={`w-full max-w-[360px] py-2.5 sm:py-3 rounded-xl font-black uppercase tracking-widest shadow-lg active:scale-95 transition-transform text-sm ${!selectedNumber ? 'bg-gray-500 opacity-50' : 'bg-orange-500 text-white'}`}
+          className={`flex-1 h-[55px] rounded-xl font-black text-lg uppercase tracking-widest shadow-lg transition-transform active:scale-95 ${!selectedNumber ? 'bg-gray-500 opacity-50' : 'bg-orange-500 text-white'}`}
         >
           Start Game
         </button>
-      </div>
 
+      </div>
     </div>
   );
 };
