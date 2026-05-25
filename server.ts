@@ -135,6 +135,7 @@ app.get('/api/admin/pending', async (req, res) => {
     const safeTxs = txs.map(t => ({ ...t, user: { ...t.user, telegramId: t.user.telegramId.toString() } }));
     res.json(safeTxs);
 });
+
 app.post('/api/admin/add-balance', async (req, res) => {
     const { telegramId, amount } = req.body;
     try {
@@ -146,63 +147,165 @@ app.post('/api/admin/add-balance', async (req, res) => {
     } catch (e) { res.status(500).json({ error: "Error" }); }
 });
 
+app.post('/api/admin/action', async (req, res) => {
+    const { auth, id, action } = req.body;
+    if (auth !== 'admin123') return res.status(403).send("Forbidden access authorization keys");
+
+    try {
+        const tx = await prisma.transaction.findUnique({ where: { id }, include: { user: true } });
+        if (!tx || tx.status !== 'PENDING') return res.status(400).json({ success: false, message: "Invalid tx tracking state status" });
+
+        if (action === 'APPROVE') {
+            if (tx.type === 'DEPOSIT') {
+                await prisma.$transaction([
+                    prisma.user.update({ where: { id: tx.userId }, data: { balance: { increment: tx.amount } } }),
+                    prisma.transaction.update({ where: { id }, data: { status: 'APPROVED' } })
+                ]);
+                bot.telegram.sendMessage(tx.user.telegramId.toString(), `🔔 **Deposit Approved!**\n\nYour account has been credited with +${tx.amount} ETB via Telebirr confirmation verification.`);
+            } else {
+                await prisma.transaction.update({ where: { id }, data: { status: 'APPROVED' } });
+                bot.telegram.sendMessage(tx.user.telegramId.toString(), `💸 **Withdrawal Completed Successfully!**\n\nYour payout request transfer for ${tx.amount} ETB has been executed over Telebirr channel networks.`);
+            }
+        } 
+        else if (action === 'REJECT') {
+            if (tx.type === 'WITHDRAWAL') {
+                await prisma.$transaction([
+                    prisma.user.update({ where: { id: tx.userId }, data: { balance: { increment: tx.amount } } }),
+                    prisma.transaction.update({ where: { id }, data: { status: 'REJECTED' } })
+                ]);
+            } else {
+                await prisma.transaction.update({ where: { id }, data: { status: 'REJECTED' } });
+            }
+            bot.telegram.sendMessage(tx.user.telegramId.toString(), `⚠️ **Transaction Request Refused/Rejected**\n\nYour ${tx.type.toLowerCase()} request for ${tx.amount} ETB was denied or rejected by system operators. Contact support services if you require details.`);
+        }
+
+        res.json({ success: true });
+    } catch (e: any) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
 // ==========================================
 // 🤖 BOT LOGIC
 // ==========================================
 
 const dashboardMenu = Markup.inlineKeyboard([
   [Markup.button.webApp('Play Now 🎮', appUrl)],
+  [Markup.button.callback('Register Account 📝', 'reg_start')],
   [Markup.button.callback('Deposit ➕', 'deposit_start'), Markup.button.callback('Withdraw ➖', 'withdraw_start')],
   [Markup.button.callback('Balance 💰', 'balance')]
 ]);
+
 const cancelKeyboard = Markup.keyboard([['❌ Cancel']]).resize();
+const shareContactKeyboard = Markup.keyboard([
+  [Markup.button.contactRequest('📱 Share Contact to Register')],
+  ['❌ Cancel']
+]).resize();
+
 const userStates = new Map<string, { step: string, data: any }>();
 
-// 1. START COMMAND (Handles Deep Links)
+// 1. START COMMAND (Handles Deep Links & Registers initial entry)
 bot.start(async (ctx) => {
     const uid = ctx.from.id;
     try {
         await prisma.user.upsert({
             where: { telegramId: BigInt(uid) },
             update: { username: ctx.from.username, firstName: ctx.from.first_name },
-            create: { telegramId: BigInt(uid), username: ctx.from.username, firstName: ctx.from.first_name, isRegistered: true }
+            create: { 
+                telegramId: BigInt(uid), 
+                username: ctx.from.username, 
+                firstName: ctx.from.first_name, 
+                isRegistered: false,
+                balance: 0.0,
+                coins: 0
+            }
         });
-    } catch(e) { console.error("DB Error:", e); }
+    } catch(e) { console.error("DB Error on startup:", e); }
 
-    // Check payload (e.g., /start deposit)
     const payload = ctx.payload;
     if (payload === 'deposit') return triggerDeposit(ctx);
     if (payload === 'withdraw') return triggerWithdraw(ctx);
 
-    ctx.replyWithPhoto({ source: path.join(rootPath, 'win.png') }, 
-        { caption: "🏆 **Welcome to Win Bingo!**", parse_mode: 'Markdown', ...dashboardMenu }
+    ctx.replyWithPhoto(
+        { source: path.join(rootPath, 'win.png') }, 
+        { 
+            caption: `🏆 **Welcome to Win Bingo, ${ctx.from.first_name}!**\n\nEthiopia's premier high-stakes Telegram Bingo application. Use the dashboard below or click the menu button to play!`, 
+            parse_mode: 'Markdown', 
+            ...dashboardMenu 
+        }
     );
 });
 
 // 2. EXPLICIT COMMANDS
-bot.command('menu', (ctx) => ctx.reply("🏆 Menu", dashboardMenu));
+bot.command('menu', (ctx) => ctx.reply("🏆 Main Dashboard Menu:", dashboardMenu));
 bot.command('deposit', (ctx) => triggerDeposit(ctx));
-bot.command('withdraw', (ctx) => triggerWithdraw(ctx)); // Updated to match /withdraw
+bot.command('withdraw', (ctx) => triggerWithdraw(ctx));
 
-// 3. ACTIONS
+// 3. REGISTRATION START ACTION
+bot.action('reg_start', async (ctx) => {
+    const uid = ctx.from.id;
+    try {
+        const user = await prisma.user.findUnique({ where: { telegramId: BigInt(uid) } });
+        if (user && user.isRegistered) {
+            return ctx.reply("⚠️ You are already registered and your account is completely active!");
+        }
+        ctx.reply("ምዝገባ ለመጀመር እባክዎ ከታች ያለውን ሰማያዊ ቁልፍ በመጫን ስልክ ቁጥርዎን ያጋሩን።\n\nTo begin registration, click the button below to share your contact number safely:", shareContactKeyboard);
+    } catch (e) { ctx.reply("Error querying user status."); }
+});
+
+// 4. HANDLERS FOR ACTIONS
 bot.action('deposit_start', (ctx) => triggerDeposit(ctx));
 bot.action('withdraw_start', (ctx) => triggerWithdraw(ctx));
 bot.action('balance', async (ctx) => {
-    const user = await prisma.user.findUnique({ where: { telegramId: BigInt(ctx.from?.id!) } });
-    ctx.reply(`💰 Balance: ${user?.balance.toFixed(2)} ETB`, dashboardMenu);
+    try {
+        const user = await prisma.user.findUnique({ where: { telegramId: BigInt(ctx.from?.id!) } });
+        ctx.reply(`💰 *Your Balance Summary*\n\n💵 Wallet Balance: *${user?.balance.toFixed(2)} ETB*\n🪙 Bonus Win Coins: *${user?.coins || 0}*`, { parse_mode: 'Markdown', ...dashboardMenu });
+    } catch (e) { ctx.reply("Could not retrieve balance."); }
 });
 
-// 4. FLOWS
+// 5. TRIGGER UTILITIES
 function triggerDeposit(ctx: any) {
     userStates.set(ctx.from.id.toString(), { step: 'DEPOSIT_AMOUNT', data: {} });
-    ctx.reply("💵 **Deposit Funds**\n\nEnter amount (ETB):", cancelKeyboard);
-}
-function triggerWithdraw(ctx: any) {
-    userStates.set(ctx.from.id.toString(), { step: 'WITHDRAW_AMOUNT', data: {} });
-    ctx.reply("🏦 **Withdraw Funds**\n\nEnter amount (ETB):", cancelKeyboard);
+    ctx.reply("💵 **Manual Deposit via Telebirr**\n\nEnter the amount you want to deposit (Minimum 50 ETB):", cancelKeyboard);
 }
 
-// 5. TEXT LISTENER
+function triggerWithdraw(ctx: any) {
+    userStates.set(ctx.from.id.toString(), { step: 'WITHDRAW_AMOUNT', data: {} });
+    ctx.reply("🏦 **Manual Withdrawal via Telebirr**\n\nEnter the amount you wish to withdraw (Minimum 100 ETB):", cancelKeyboard);
+}
+
+// 6. CONTACT CALLBACK AND STATE STEPPERS
+bot.on('contact', async (ctx) => {
+    const contact = ctx.message.contact;
+    const uid = ctx.from.id;
+
+    if (contact.user_id !== uid) {
+        return ctx.reply("❌ Error: You must share your own personal contact card.");
+    }
+
+    try {
+        const user = await prisma.user.findUnique({ where: { telegramId: BigInt(uid) } });
+        if (user && user.isRegistered) {
+            return ctx.reply("⚠️ Your phone number is already bound to an active registered account.", Markup.removeKeyboard());
+        }
+
+        await prisma.user.update({
+            where: { telegramId: BigInt(uid) },
+            data: {
+                phoneNumber: contact.phone_number,
+                isRegistered: true,
+                balance: { increment: 100.0 }
+            }
+        });
+
+        await ctx.reply("✅ *Registration Successful!*\n\nYour account has been securely verified and linked.\n🎁 A **100.00 ETB Welcome Bonus** has been credited to your balance!", { parse_mode: 'Markdown', ...Markup.removeKeyboard() });
+        ctx.reply("🏆 Use the menu below to join a lobby:", dashboardMenu);
+    } catch (e) {
+        console.error(e);
+        ctx.reply("❌ There was a database error processing your registration parameters.");
+    }
+});
+
 bot.on('text', async (ctx) => {
     const uid = ctx.from.id.toString();
     const text = ctx.message.text;
@@ -210,35 +313,72 @@ bot.on('text', async (ctx) => {
 
     if (text === '❌ Cancel') {
         userStates.delete(uid);
-        return ctx.reply("Cancelled.", Markup.removeKeyboard()).then(() => ctx.reply("Menu", dashboardMenu));
+        return ctx.reply("Operation Cancelled.", Markup.removeKeyboard()).then(() => ctx.reply("Dashboard Menu Options:", dashboardMenu));
     }
 
     if (!state) return;
 
+    // --- DEPOSIT FLOW ---
     if (state.step === 'DEPOSIT_AMOUNT') {
         const amount = parseFloat(text);
-        if (isNaN(amount) || amount < 5) return ctx.reply("Min 5 ETB.");
-        ctx.reply(`To Deposit ${amount} ETB:\n1. Transfer to 0924497619\n2. Send SMS here.`, Markup.removeKeyboard());
+        if (isNaN(amount) || amount < 50) return ctx.reply("⚠️ Deposit failed. Minimum payment entry is 50 ETB. Please input a valid amount:");
+        
+        ctx.reply(`💸 **Payment Guide (${amount} ETB)**\n\n1. Open your Telebirr app and send funds to our treasury merchant/phone:\n👉 \`0919184337\`\n\n2. Once paid, copy the Transaction Reference code or SMS confirmation text and paste it right here:`, cancelKeyboard);
         userStates.set(uid, { step: 'DEPOSIT_CONFIRM', data: { amount } });
     }
     else if (state.step === 'DEPOSIT_CONFIRM') {
-        // Auto-approve for demo
-        await prisma.user.update({ where: { telegramId: BigInt(uid) }, data: { balance: { increment: state.data.amount } } });
-        ctx.reply(`✅ Received! +${state.data.amount} ETB`, dashboardMenu);
+        const user = await prisma.user.findUnique({ where: { telegramId: BigInt(uid) } });
+        if (!user) return ctx.reply("User profile context error.");
+
+        await prisma.transaction.create({
+            data: {
+                userId: user.id,
+                type: 'DEPOSIT',
+                amount: state.data.amount,
+                method: 'Telebirr',
+                ref: text,
+                status: 'PENDING'
+            }
+        });
+
+        ctx.reply("✅ **Transaction Logged!**\n\nYour deposit reference receipt has been dispatched to administrators for authorization verification. Your balance updates within 10-15 minutes.", Markup.removeKeyboard());
         userStates.delete(uid);
     }
+    // --- WITHDRAW FLOW ---
     else if (state.step === 'WITHDRAW_AMOUNT') {
         const amount = parseFloat(text);
+        if (isNaN(amount) || amount < 100) return ctx.reply("⚠️ Minimum withdrawal allowed is 100 ETB. Enter an eligible sum:");
+        
+        const user = await prisma.user.findUnique({ where: { telegramId: BigInt(uid) } });
+        if (!user || user.balance < amount) {
+            userStates.delete(uid);
+            return ctx.reply(`❌ Insufficient funds! Your balance is only ${user?.balance.toFixed(2)} ETB.`, Markup.removeKeyboard());
+        }
+
+        ctx.reply("📱 Enter your Telebirr phone number where you wish to receive the payout payout transfer:", cancelKeyboard);
         userStates.set(uid, { step: 'WITHDRAW_PHONE', data: { amount } });
-        ctx.reply("Enter Phone:", Markup.removeKeyboard());
     }
     else if (state.step === 'WITHDRAW_PHONE') {
         const user = await prisma.user.findUnique({ where: { telegramId: BigInt(uid) } });
-        if(user) {
-             await prisma.transaction.create({ data: { userId: user.id, type: 'WITHDRAWAL', amount: state.data.amount, phone: text, status: 'PENDING' }});
-             await prisma.user.update({ where: { id: user.id }, data: { balance: { decrement: state.data.amount } } });
+        if (user) {
+            await prisma.$transaction([
+                prisma.transaction.create({
+                    data: {
+                        userId: user.id,
+                        type: 'WITHDRAWAL',
+                        amount: state.data.amount,
+                        method: 'Telebirr',
+                        phone: text,
+                        status: 'PENDING'
+                    }
+                }),
+                prisma.user.update({
+                    where: { id: user.id },
+                    data: { balance: { decrement: state.data.amount } }
+                })
+            ]);
+            ctx.reply(`✅ **Payout Order Placed!**\n\nRequest for ${state.data.amount} ETB to Telebirr (${text}) is queued. Administrators are executing transaction transfers shortly.`, dashboardMenu);
         }
-        ctx.reply("✅ Request Sent!", dashboardMenu);
         userStates.delete(uid);
     }
 });

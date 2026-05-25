@@ -30,7 +30,7 @@
         const AUTH_KEY = 'admin123'; // Hardcoded for simplicity
 
         async function loadData() {
-            const res = await fetch(`/api/admin/transactions?auth=${AUTH_KEY}`);
+            const res = await fetch(`/api/admin/pending?auth=${AUTH_KEY}`);
             if(res.status === 403) return alert("Auth Failed");
             const data = await res.json();
             render(data);
@@ -53,26 +53,27 @@
             list.innerHTML = '';
 
             if (items.length === 0) {
-                list.innerHTML = '<p style="text-align:center; color:#999;">No pending requests.</p>';
+                list.innerHTML = '<p style="text-align:center; color:#999;">No pending request entries inside queue.</p>';
                 return;
             }
 
             items.forEach(item => {
+                // Aligned perfectly with Prisma schema capitalization matching "DEPOSIT"
                 const isDep = item.type === 'DEPOSIT';
                 const div = document.createElement('div');
                 div.className = `card ${isDep ? 'deposit' : 'withdraw'}`;
                 
                 div.innerHTML = `
                     <div class="info">
-                        <h3>${isDep ? '💵 Deposit' : '🏦 Withdraw'} - ${item.amount} ETB</h3>
-                        <p>User: @${item.username} (ID: ${item.userId})</p>
-                        ${isDep ? `<p><strong>SMS/Ref:</strong> ${item.sms || item.ref}</p>` 
-                                : `<p><strong>Phone:</strong> ${item.phone}</p>`}
-                        <p class="badge">${new Date(item.date).toLocaleString()}</p>
+                        <h3>${isDep ? '💵 Deposit Request' : '🏦 Payout Order'} — ${item.amount} ETB</h3>
+                        <p>User account name: ${item.user?.firstName || 'Unknown'} (ID: ${item.user?.telegramId || '---'})</p>
+                        ${isDep ? `<p><strong>Telebirr Reference/SMS token text:</strong> \`${item.ref || 'None'}\`</p>` 
+                                : `<p><strong>Payout Destination Target Mobile:</strong> \`${item.phone || 'None'}\`</p>`}
+                        <p class="badge">Created at: ${new Date(item.date).toLocaleString()}</p>
                     </div>
                     <div class="actions">
-                        <button class="btn-approve" onclick="takeAction('${item.id}', 'APPROVE')">Approve</button>
-                        <button class="btn-reject" onclick="takeAction('${item.id}', 'REJECT')">Reject</button>
+                        <button class="btn-approve" onclick="takeAction('${item.id}', 'APPROVE')">Approve Authorization</button>
+                        <button class="btn-reject" onclick="takeAction('${item.id}', 'REJECT')">Deny / Reject</button>
                     </div>
                 `;
                 list.appendChild(div);
@@ -84,4 +85,4 @@
         setInterval(loadData, 10000);
     </script>
 </body>
-</html>s
+</html>
