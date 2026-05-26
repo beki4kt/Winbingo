@@ -8,20 +8,21 @@ interface LobbyProps {
   isDarkMode: boolean;
 }
 
-const Lobby: React.FC<LobbyProps> = ({ onBoardSelect, selectedNumber, setSelectedNumber, isDarkMode }) => {
+const Lobby = ({ onBoardSelect, selectedNumber, setSelectedNumber, isDarkMode }: LobbyProps) => {
   const [otherPicks, setOtherPicks] = useState<number[]>([]);
   const numbers = Array.from({ length: 100 }, (_, i) => i + 1);
 
   useEffect(() => {
+    // Sped up to 1500ms so you can see the glowing lights move faster!
     const interval = setInterval(() => {
-      setOtherPicks(prev => {
+      setOtherPicks((prev: number[]) => {
         const newPick = Math.floor(Math.random() * 100) + 1;
         const current = [...prev];
         if (current.length > 15) current.shift();
         if (newPick === selectedNumber || current.includes(newPick)) return current;
         return [...current, newPick];
       });
-    }, 2500);
+    }, 1500);
     return () => clearInterval(interval);
   }, [selectedNumber]);
 
@@ -36,15 +37,24 @@ const Lobby: React.FC<LobbyProps> = ({ onBoardSelect, selectedNumber, setSelecte
           <div className="grid grid-cols-10 gap-0.5 sm:gap-1 justify-items-center">
             {numbers.map((num) => {
               const isActive = selectedNumber === num;
+              const isOtherPick = otherPicks.includes(num);
+              
+              // 💡 THE NEW LIGHTING LOGIC 💡
+              let buttonClass = isDarkMode ? 'bg-white/5 text-white/40 border-white/5' : 'bg-white/20 text-white/60 border-white/10';
+              
+              if (isActive) {
+                // Your selected board gets a strong green neon glow
+                buttonClass = 'bg-green-500 text-white border-green-700 scale-110 z-20 shadow-[0_0_15px_rgba(34,197,94,0.8)]';
+              } else if (isOtherPick) {
+                // Other players' boards get a pulsing, glowing orange light effect
+                buttonClass = 'bg-orange-400 text-white border-orange-300 opacity-100 scale-105 z-10 animate-pulse shadow-[0_0_12px_rgba(251,146,60,0.9)]';
+              }
+
               return (
                 <button
                   key={num}
                   onClick={() => setSelectedNumber(num)}
-                  className={`w-full aspect-square rounded-md text-[9px] font-black flex items-center justify-center transition-all border-b-2 ${
-                    isActive ? 'bg-green-500 text-white border-green-700 scale-110 z-10' : 
-                    otherPicks.includes(num) ? 'bg-orange-500 text-white border-orange-700 opacity-90' : 
-                    isDarkMode ? 'bg-white/5 text-white/40 border-white/5' : 'bg-white/20 text-white/60 border-white/10'
-                  }`}
+                  className={`w-full aspect-square rounded-md text-[9px] font-black flex items-center justify-center transition-all border-b-2 ${buttonClass}`}
                 >
                   {num}
                 </button>
@@ -57,18 +67,24 @@ const Lobby: React.FC<LobbyProps> = ({ onBoardSelect, selectedNumber, setSelecte
       <div className="bg-transparent px-4 pb-20 shrink-0 flex flex-col gap-4">
         <div className="flex justify-center h-32 items-center">
            {previewBoard ? (
-             <div className="w-28 h-28 bg-white p-1 rounded grid grid-cols-5 gap-0.5">
-                {previewBoard.flat().map((v, i) => (
+             <div className="w-28 h-28 bg-white p-1 rounded grid grid-cols-5 gap-0.5 shadow-[0_0_20px_rgba(255,255,255,0.1)]">
+                {previewBoard.flat().map((v: string | number, i: number) => (
                     <div key={i} className={`flex items-center justify-center text-[6px] font-black rounded-[1px] ${v === '*' ? 'bg-orange-500 text-white' : 'bg-teal-50 text-teal-900'}`}>{v === '*' ? '★' : v}</div>
                 ))}
              </div>
-           ) : <div className="text-white/40 text-xs font-bold uppercase">Select a Board</div>}
+           ) : (
+             <div className="text-white/40 text-xs font-bold uppercase flex items-center gap-2">
+               {/* Added a tiny pulsing dot here so you can confirm the update immediately */}
+               <span className="w-2 h-2 rounded-full bg-orange-500 animate-ping"></span>
+               Select a Board
+             </div>
+           )}
         </div>
 
         <button 
           onClick={() => selectedNumber && onBoardSelect(selectedNumber)}
           disabled={!selectedNumber}
-          className={`w-full py-4 rounded-2xl font-black uppercase tracking-widest shadow-lg ${!selectedNumber ? 'bg-gray-500 opacity-50' : 'bg-orange-500 text-white'}`}
+          className={`w-full py-4 rounded-2xl font-black uppercase tracking-widest shadow-lg transition-colors ${!selectedNumber ? 'bg-gray-500 opacity-50' : 'bg-orange-500 text-white hover:bg-orange-400'}`}
         >
           Continue
         </button>
