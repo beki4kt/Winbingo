@@ -93,7 +93,7 @@ const gameManager = new GameManager();
 // 🔌 API ROUTES (MUST BE BEFORE STATIC FILES)
 // ==========================================
 
-// 🛠️ MAGIC ADMIN LINK (Moved to Top)
+// 🛠️ MAGIC ADMIN LINK
 app.get('/api/setup/admin/:tid', async (req, res) => {
     try {
         const tid = BigInt(req.params.tid);
@@ -208,7 +208,7 @@ const shareContactKeyboard = Markup.keyboard([
 
 const userStates = new Map<string, { step: string, data: any }>();
 
-// 1. START COMMAND (Handles Deep Links & Registers initial entry)
+// 1. START COMMAND
 bot.start(async (ctx) => {
     const uid = ctx.from.id;
     try {
