@@ -8,15 +8,13 @@ interface LobbyProps {
   isDarkMode: boolean;
 }
 
-// Removed React.FC and explicitly destructured LobbyProps to prevent VS Code "any" errors
-const Lobby = ({ onBoardSelect, selectedNumber, setSelectedNumber, isDarkMode }: LobbyProps) => {
+const Lobby: React.FC<LobbyProps> = ({ onBoardSelect, selectedNumber, setSelectedNumber, isDarkMode }) => {
   const [otherPicks, setOtherPicks] = useState<number[]>([]);
   const numbers = Array.from({ length: 100 }, (_, i) => i + 1);
 
   useEffect(() => {
     const interval = setInterval(() => {
-      // Explicitly typed (prev: number[]) to satisfy strict local TypeScript rules
-      setOtherPicks((prev: number[]) => {
+      setOtherPicks(prev => {
         const newPick = Math.floor(Math.random() * 100) + 1;
         const current = [...prev];
         if (current.length > 15) current.shift();
@@ -32,14 +30,19 @@ const Lobby = ({ onBoardSelect, selectedNumber, setSelectedNumber, isDarkMode }:
   const cardBg = isDarkMode ? 'bg-white/5' : 'bg-white/10';
 
   return (
-    <div className={`fixed inset-0 w-full h-full ${bgColor} overflow-hidden`}>
+    // Reverted to standard relative flow (h-full) so it DOES NOT cover your Header
+    <div className={`flex flex-col h-full w-full ${bgColor} overflow-hidden`}>
       
-      {/* TOP SECTION: 1-100 GRID */}
-      <div className="absolute top-0 left-0 right-0 bottom-[90px] p-2 flex items-center justify-center">
-        <div className={`${cardBg} p-1 rounded-xl shadow-2xl w-full max-w-[380px] aspect-square flex flex-col`}>
+      {/* TOP SECTION: 1-100 GRID 
+          min-h-0 ensures this flex child shrinks to fit the screen 
+          instead of pushing the bottom controls off-screen.
+      */}
+      <div className="flex-1 flex justify-center items-center p-2 min-h-0 overflow-hidden">
+        <div className={`${cardBg} p-1 rounded-xl shadow-lg w-full max-w-[400px] h-full max-h-[400px] aspect-square flex flex-col`}>
           
+          {/* Forced to exactly 10 rows and 10 columns */}
           <div 
-            className="grid grid-cols-10 gap-[1px] w-full h-full"
+            className="w-full h-full grid grid-cols-10 gap-[1px]"
             style={{ gridTemplateRows: 'repeat(10, minmax(0, 1fr))' }}
           >
             {numbers.map((num) => {
@@ -48,7 +51,7 @@ const Lobby = ({ onBoardSelect, selectedNumber, setSelectedNumber, isDarkMode }:
                 <button
                   key={num}
                   onClick={() => setSelectedNumber(num)}
-                  className={`w-full h-full text-[10px] sm:text-[11px] font-black flex items-center justify-center transition-colors ${
+                  className={`w-full h-full text-[10px] sm:text-[11px] font-black flex items-center justify-center transition-colors leading-none ${
                     isActive ? 'bg-green-500 text-white shadow-lg border-b-2 border-green-700 z-10 scale-110 rounded-sm' : 
                     otherPicks.includes(num) ? 'bg-orange-500 text-white opacity-90 rounded-[2px]' : 
                     isDarkMode ? 'bg-white/5 text-white/40 rounded-[2px] hover:bg-white/10' : 'bg-white/20 text-white/60 rounded-[2px] hover:bg-white/30'
@@ -63,18 +66,20 @@ const Lobby = ({ onBoardSelect, selectedNumber, setSelectedNumber, isDarkMode }:
         </div>
       </div>
 
-      {/* BOTTOM SECTION: SIDE-BY-SIDE CONTROLS */}
-      <div className="absolute bottom-0 left-0 right-0 h-[90px] w-full px-4 flex items-center justify-between gap-4 bg-black/20 border-t border-white/5">
+      {/* BOTTOM SECTION: SIDE-BY-SIDE CONTROLS
+          Safely placed at the bottom without fixed positioning.
+      */}
+      <div className="shrink-0 h-[80px] sm:h-[90px] w-full px-3 sm:px-4 flex items-center justify-between gap-3 sm:gap-4 bg-black/20 border-t border-white/5">
         
         {/* MINI PREVIEW (Left Side) */}
-        <div className="w-[60px] h-[60px] shrink-0 flex items-center justify-center bg-black/30 rounded-md p-1 border border-white/10">
+        <div className="w-[55px] h-[55px] sm:w-[60px] sm:h-[60px] shrink-0 flex items-center justify-center bg-black/30 rounded-md p-1 border border-white/10">
            {previewBoard ? (
              <div 
                className="w-full h-full bg-white p-[1px] rounded-[3px] grid grid-cols-5 gap-[1px]"
                style={{ gridTemplateRows: 'repeat(5, minmax(0, 1fr))' }}
              >
-                {previewBoard.flat().map((v: string | number, i: number) => (
-                    <div key={i} className={`flex items-center justify-center text-[5px] font-black rounded-[1px] ${v === '*' ? 'bg-orange-500 text-white' : 'bg-teal-50 text-teal-900'}`}>
+                {previewBoard.flat().map((v, i) => (
+                    <div key={i} className={`flex items-center justify-center text-[5px] sm:text-[6px] font-black rounded-[1px] leading-none ${v === '*' ? 'bg-orange-500 text-white' : 'bg-teal-50 text-teal-900'}`}>
                       {v === '*' ? '★' : v}
                     </div>
                 ))}
@@ -88,7 +93,7 @@ const Lobby = ({ onBoardSelect, selectedNumber, setSelectedNumber, isDarkMode }:
         <button 
           onClick={() => selectedNumber && onBoardSelect(selectedNumber)}
           disabled={!selectedNumber}
-          className={`flex-1 h-[60px] rounded-xl font-black text-lg uppercase tracking-widest shadow-lg active:scale-95 transition-all ${!selectedNumber ? 'bg-white/10 text-white/30 cursor-not-allowed' : 'bg-orange-500 text-white hover:bg-orange-400'}`}
+          className={`flex-1 h-[55px] sm:h-[60px] rounded-xl font-black text-lg sm:text-xl uppercase tracking-widest shadow-lg active:scale-95 transition-all ${!selectedNumber ? 'bg-white/10 text-white/30 cursor-not-allowed' : 'bg-orange-500 text-white hover:bg-orange-400'}`}
         >
           Start Game
         </button>
