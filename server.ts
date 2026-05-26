@@ -165,10 +165,10 @@ app.post('/api/admin/action', async (req, res) => {
                     prisma.user.update({ where: { id: tx.userId }, data: { balance: { increment: tx.amount } } }),
                     prisma.transaction.update({ where: { id }, data: { status: 'APPROVED' } })
                 ]);
-                bot.telegram.sendMessage(tx.user.telegramId.toString(), `🔔 **Deposit Approved!**\n\nYour account has been credited with +${tx.amount} ETB via Telebirr confirmation verification.`);
+                bot.telegram.sendMessage(tx.user.telegramId.toString(), `🔔 *Deposit Approved!*\n\nYour account has been credited with +${tx.amount} ETB via verification.`, { parse_mode: 'Markdown' });
             } else {
                 await prisma.transaction.update({ where: { id }, data: { status: 'APPROVED' } });
-                bot.telegram.sendMessage(tx.user.telegramId.toString(), `💸 **Withdrawal Completed Successfully!**\n\nYour payout request transfer for ${tx.amount} ETB has been executed over Telebirr channel networks.`);
+                bot.telegram.sendMessage(tx.user.telegramId.toString(), `💸 *Withdrawal Completed Successfully!*\n\nYour payout request transfer for ${tx.amount} ETB has been executed over Telebirr channel networks.`, { parse_mode: 'Markdown' });
             }
         } 
         else if (action === 'REJECT') {
@@ -180,7 +180,7 @@ app.post('/api/admin/action', async (req, res) => {
             } else {
                 await prisma.transaction.update({ where: { id }, data: { status: 'REJECTED' } });
             }
-            bot.telegram.sendMessage(tx.user.telegramId.toString(), `⚠️ **Transaction Request Refused/Rejected**\n\nYour ${tx.type.toLowerCase()} request for ${tx.amount} ETB was denied or rejected by system operators. Contact support services if you require details.`);
+            bot.telegram.sendMessage(tx.user.telegramId.toString(), `⚠️ *Transaction Request Refused/Rejected*\n\nYour ${tx.type.toLowerCase()} request for ${tx.amount} ETB was denied or rejected by system operators. Contact support services if you require details.`, { parse_mode: 'Markdown' });
         }
 
         res.json({ success: true });
@@ -233,7 +233,7 @@ bot.start(async (ctx) => {
     ctx.replyWithPhoto(
         { source: path.join(rootPath, 'win.png') }, 
         { 
-            caption: `🏆 **Welcome to Win Bingo, ${ctx.from.first_name}!**\n\nEthiopia's premier high-stakes Telegram Bingo application. Use the dashboard below or click the menu button to play!`, 
+            caption: `🏆 *Welcome to Win Bingo, ${ctx.from.first_name}!*\n\nEthiopia's premier high-stakes Telegram Bingo application. Use the dashboard below or click the menu button to play!`, 
             parse_mode: 'Markdown', 
             ...dashboardMenu 
         }
@@ -245,64 +245,91 @@ bot.command('menu', (ctx) => ctx.reply("🏆 Main Dashboard Menu:", dashboardMen
 bot.command('deposit', (ctx) => triggerDeposit(ctx));
 bot.command('withdraw', (ctx) => triggerWithdraw(ctx));
 
-// 3. REGISTRATION START ACTION
-// (Handled below in section 4)
-
-// 4. HANDLERS FOR ACTIONS
+// 3. HANDLERS FOR ACTIONS
 bot.action('deposit_start', async (ctx) => {
-    await ctx.answerCbQuery().catch(() => {});
-    triggerDeposit(ctx);
+    try {
+        await ctx.answerCbQuery();
+        triggerDeposit(ctx);
+    } catch (e) { console.error(e); }
 });
+
 bot.action('deposit_telebirr', async (ctx) => {
-    await ctx.answerCbQuery().catch(() => {});
-    userStates.set(ctx.from.id.toString(), { step: 'DEPOSIT_AMOUNT', data: { method: 'Telebirr' } });
-    ctx.editMessageText("💵 **Deposit via Telebirr**\n\nEnter the amount you want to deposit (Minimum 1 ETB):");
+    try {
+        await ctx.answerCbQuery();
+        if (ctx.from) {
+            userStates.set(ctx.from.id.toString(), { step: 'DEPOSIT_AMOUNT', data: { method: 'Telebirr' } });
+            await ctx.editMessageText("💵 *Deposit via Telebirr*\n\nEnter the amount you want to deposit (Minimum 1 ETB):", { parse_mode: 'Markdown' });
+        }
+    } catch (e) { console.error(e); }
 });
+
 bot.action('deposit_cbe', async (ctx) => {
-    await ctx.answerCbQuery().catch(() => {});
-    userStates.set(ctx.from.id.toString(), { step: 'DEPOSIT_AMOUNT', data: { method: 'CBE' } });
-    ctx.editMessageText("💵 **Deposit via CBE**\n\nEnter the amount you want to deposit (Minimum 1 ETB):");
+    try {
+        await ctx.answerCbQuery();
+        if (ctx.from) {
+            userStates.set(ctx.from.id.toString(), { step: 'DEPOSIT_AMOUNT', data: { method: 'CBE' } });
+            await ctx.editMessageText("💵 *Deposit via CBE*\n\nEnter the amount you want to deposit (Minimum 1 ETB):", { parse_mode: 'Markdown' });
+        }
+    } catch (e) { console.error(e); }
 });
+
 bot.action('withdraw_start', async (ctx) => {
-    await ctx.answerCbQuery().catch(() => {});
-    triggerWithdraw(ctx);
+    try {
+        await ctx.answerCbQuery();
+        triggerWithdraw(ctx);
+    } catch (e) { console.error(e); }
 });
+
 bot.action('balance', async (ctx) => {
-    await ctx.answerCbQuery().catch(() => {});
     try {
+        await ctx.answerCbQuery();
         const user = await prisma.user.findUnique({ where: { telegramId: BigInt(ctx.from?.id!) } });
-        ctx.reply(`💰 *Your Balance Summary*\n\n💵 Wallet Balance: *${user?.balance.toFixed(2)} ETB*\n🪙 Bonus Win Coins: *${user?.coins || 0}*`, { parse_mode: 'Markdown', ...dashboardMenu });
-    } catch (e) { ctx.reply("Could not retrieve balance."); }
+        await ctx.reply(`💰 *Your Balance Summary*\n\n💵 Wallet Balance: *${user?.balance.toFixed(2)} ETB*\n🪙 Bonus Win Coins: *${user?.coins || 0}*`, { parse_mode: 'Markdown', ...dashboardMenu });
+    } catch (e) { 
+        console.error(e);
+        await ctx.reply("Could not retrieve balance."); 
+    }
 });
+
 bot.action('reg_start', async (ctx) => {
-    await ctx.answerCbQuery().catch(() => {});
-    const uid = ctx.from.id;
     try {
+        await ctx.answerCbQuery();
+        const uid = ctx.from.id;
         const user = await prisma.user.findUnique({ where: { telegramId: BigInt(uid) } });
         if (user && user.isRegistered) {
-            return ctx.reply("⚠️ You are already registered and your account is completely active!");
+            await ctx.reply("⚠️ You are already registered and your account is completely active!");
+            return;
         }
-        ctx.reply("ምዝገባ ለመጀመር እባክዎ ከታች ያለውን ሰማያዊ ቁልፍ በመጫን ስልክ ቁጥርዎን ያጋሩን።\n\nTo begin registration, click the button below to share your contact number safely:", shareContactKeyboard);
-    } catch (e) { ctx.reply("Error querying user status."); }
+        await ctx.reply("ምዝገባ ለመጀመር እባክዎ ከታች ያለውን ሰማያዊ ቁልፍ በመጫን ስልክ ቁጥርዎን ያጋሩን።\n\nTo begin registration, click the button below to share your contact number safely:", shareContactKeyboard);
+    } catch (e) { 
+        console.error(e);
+        await ctx.reply("Error querying user status."); 
+    }
 });
 
-// 5. TRIGGER UTILITIES
+// 4. TRIGGER UTILITIES
 function triggerDeposit(ctx: any) {
     userStates.set(ctx.from.id.toString(), { step: 'DEPOSIT_METHOD', data: {} });
-    ctx.reply("💵 **Deposit Funds**\n\nPlease select your preferred payment method:", Markup.inlineKeyboard([
-        [
-            Markup.button.callback('Telebirr', 'deposit_telebirr'),
-            Markup.button.callback('CBE', 'deposit_cbe')
-        ]
-    ]));
+    ctx.reply("💵 *Deposit Funds*\n\nPlease select your preferred payment method:", {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([
+            [
+                Markup.button.callback('Telebirr', 'deposit_telebirr'),
+                Markup.button.callback('CBE', 'deposit_cbe')
+            ]
+        ])
+    });
 }
 
 function triggerWithdraw(ctx: any) {
     userStates.set(ctx.from.id.toString(), { step: 'WITHDRAW_AMOUNT', data: {} });
-    ctx.reply("🏦 **Withdrawal via Telebirr or CBE**\n\nEnter the amount you wish to withdraw (Minimum 100 ETB):", cancelKeyboard);
+    ctx.reply("🏦 *Withdrawal via Telebirr or CBE*\n\nEnter the amount you wish to withdraw (Minimum 100 ETB):", {
+        parse_mode: 'Markdown',
+        ...cancelKeyboard
+    });
 }
 
-// 6. CONTACT CALLBACK AND STATE STEPPERS
+// 5. CONTACT CALLBACK AND STATE STEPPERS
 bot.on('contact', async (ctx) => {
     const contact = ctx.message.contact;
     const uid = ctx.from.id;
@@ -326,7 +353,7 @@ bot.on('contact', async (ctx) => {
             }
         });
 
-        await ctx.reply("✅ *Registration Successful!*\n\nYour account has been securely verified and linked.\n🎁 A **100.00 ETB Welcome Bonus** has been credited to your balance!", { parse_mode: 'Markdown', ...Markup.removeKeyboard() });
+        await ctx.reply("✅ *Registration Successful!*\n\nYour account has been securely verified and linked.\n🎁 A *100.00 ETB* Welcome Bonus has been credited to your balance!", { parse_mode: 'Markdown', ...Markup.removeKeyboard() });
         ctx.reply("🏆 Use the menu below to join a lobby:", dashboardMenu);
     } catch (e) {
         console.error(e);
@@ -355,9 +382,9 @@ bot.on('text', async (ctx) => {
         const cbeAccount = process.env.CBE_ACCOUNT_NUMBER || '1000123456789';
         
         if (method === 'CBE') {
-            ctx.reply(`💸 **Payment Guide (${amount} ETB)**\n\n1. Send funds to our CBE account:\n👉 \`${cbeAccount}\`\n\n2. Once paid, paste the full CBE SMS confirmation text here:`, cancelKeyboard);
+            ctx.reply(`💸 *Payment Guide (${amount} ETB)*\n\n1. Send funds to our CBE account:\n👉 \`${cbeAccount}\`\n\n2. Once paid, paste the full CBE SMS confirmation text here:`, { parse_mode: 'Markdown', ...cancelKeyboard });
         } else {
-            ctx.reply(`💸 **Payment Guide (${amount} ETB)**\n\n1. Send funds to our Telebirr account:\n👉 \`0919184337\`\n\n2. Once paid, paste the Transaction Reference code here:`, cancelKeyboard);
+            ctx.reply(`💸 *Payment Guide (${amount} ETB)*\n\n1. Send funds to our Telebirr account:\n👉 \`0919184337\`\n\n2. Once paid, paste the Transaction Reference code here:`, { parse_mode: 'Markdown', ...cancelKeyboard });
         }
         userStates.set(uid, { step: 'DEPOSIT_CONFIRM', data: { amount, method } });
     }
@@ -392,7 +419,7 @@ bot.on('text', async (ctx) => {
                                     data: {
                                         userId: user.id,
                                         type: 'DEPOSIT',
-                                        amount: txDetail.amount,
+                                        amount: txDetail.amount, // credits actual amount sent
                                         method: 'CBE',
                                         ref: ref,
                                         status: 'APPROVED'
@@ -403,7 +430,7 @@ bot.on('text', async (ctx) => {
                                     data: { balance: { increment: txDetail.amount } }
                                 })
                             ]);
-                            ctx.reply(`✅ **CBE Transaction Verified!**\n\nAmount: ${txDetail.amount} ETB\nRef: ${ref}\n\nYour balance has been updated instantly.`, Markup.removeKeyboard());
+                            ctx.reply(`✅ *CBE Transaction Verified!*\n\nAmount: ${txDetail.amount} ETB\nRef: ${ref}\n\nYour balance has been updated instantly.`, { parse_mode: 'Markdown', ...Markup.removeKeyboard() });
                             userStates.delete(uid);
                             return;
                         } else {
@@ -433,7 +460,7 @@ bot.on('text', async (ctx) => {
             }
         });
 
-        ctx.reply("✅ **Transaction Logged!**\n\nYour deposit reference receipt has been dispatched to administrators for authorization verification. Your balance updates within 10-15 minutes.", Markup.removeKeyboard());
+        ctx.reply("✅ *Transaction Logged!*\n\nYour deposit reference receipt has been dispatched to administrators for authorization verification. Your balance updates within 10-15 minutes.", { parse_mode: 'Markdown', ...Markup.removeKeyboard() });
         userStates.delete(uid);
     }
     // --- WITHDRAW FLOW ---
@@ -469,7 +496,7 @@ bot.on('text', async (ctx) => {
                     data: { balance: { decrement: state.data.amount } }
                 })
             ]);
-            ctx.reply(`✅ **Payout Order Placed!**\n\nRequest for ${state.data.amount} ETB to Telebirr (${text}) is queued. Administrators are executing transaction transfers shortly.`, dashboardMenu);
+            ctx.reply(`✅ *Payout Order Placed!*\n\nRequest for ${state.data.amount} ETB to Telebirr (${text}) is queued. Administrators are executing transaction transfers shortly.`, { parse_mode: 'Markdown', ...dashboardMenu });
         }
         userStates.delete(uid);
     }
