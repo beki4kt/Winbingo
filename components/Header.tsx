@@ -8,9 +8,10 @@ interface HeaderProps {
   onReturnToGame: () => void;
   isDarkMode: boolean;
   toggleTheme: () => void;
+  onBack?: () => void;
 }
 
-const Header: React.FC<HeaderProps> = ({ balance, bonus, activeGames, stake, onReturnToGame, isDarkMode, toggleTheme }) => {
+const Header: React.FC<HeaderProps> = ({ balance, bonus, activeGames, stake, onReturnToGame, isDarkMode, toggleTheme, onBack }) => {
   const MetricBox = ({ label, value, onClick }: { label: string, value: string | number, onClick?: () => void }) => (
     <div 
       onClick={onClick}
@@ -24,16 +25,21 @@ const Header: React.FC<HeaderProps> = ({ balance, bonus, activeGames, stake, onR
   return (
     <div className="bg-transparent px-4 pt-2 pb-2 shrink-0">
       <div className="flex justify-between items-center mb-4">
-        <button className="text-white text-xs font-bold flex items-center gap-1">
+        <button onClick={onBack} className="text-white text-xs font-bold flex items-center gap-1">
           <i className="fas fa-chevron-left"></i> Back
         </button>
         <div className="text-center">
           <h1 className="text-white font-black text-sm leading-tight">Win Bingo</h1>
           <p className="text-white/60 text-[8px] font-bold uppercase leading-none tracking-widest">mini app</p>
         </div>
-        <button onClick={toggleTheme} className="text-white text-base w-8 h-8 flex items-center justify-center rounded-full bg-white/10 active:scale-90 transition-all">
-          <i className={`fas ${isDarkMode ? 'fa-sun text-yellow-400' : 'fa-moon text-white'}`}></i>
-        </button>
+        <div className="flex gap-2">
+          <button onClick={() => window.location.reload()} className="text-white text-base w-8 h-8 flex items-center justify-center rounded-full bg-white/10 active:scale-90 transition-all">
+            <i className="fas fa-sync-alt"></i>
+          </button>
+          <button onClick={toggleTheme} className="text-white text-base w-8 h-8 flex items-center justify-center rounded-full bg-white/10 active:scale-90 transition-all">
+            <i className={`fas ${isDarkMode ? 'fa-sun text-yellow-400' : 'fa-moon text-white'}`}></i>
+          </button>
+        </div>
       </div>
 
       <div className="flex gap-1.5 justify-between">

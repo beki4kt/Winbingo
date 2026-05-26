@@ -116,7 +116,19 @@ const App: React.FC = () => {
   return (
     <div className={`flex flex-col h-[100dvh] w-full max-w-md mx-auto ${isDarkMode ? 'bg-[#0f172a]' : 'bg-[#065f46]'} overflow-hidden shadow-2xl relative`}>
       {(hasSelectedStake && (currentView as View) !== View.ADMIN && (currentView as View) !== View.ACTIVE_GAME) && (
-        <Header balance={walletBalance} bonus={coinBalance} activeGames={activeSessions.length} stake={selectedStake} onReturnToGame={() => setCurrentView(View.ACTIVE_GAME)} isDarkMode={isDarkMode} toggleTheme={() => setIsDarkMode(!isDarkMode)} />
+        <Header 
+          balance={walletBalance} 
+          bonus={coinBalance} 
+          activeGames={activeSessions.length} 
+          stake={selectedStake} 
+          onReturnToGame={() => setCurrentView(View.ACTIVE_GAME)} 
+          isDarkMode={isDarkMode} 
+          toggleTheme={() => setIsDarkMode(!isDarkMode)}
+          onBack={() => {
+            if (currentView !== View.LOBBY) setCurrentView(View.LOBBY);
+            else setHasSelectedStake(false);
+          }}
+        />
       )}
       
       <main className="flex-1 overflow-hidden relative">{renderContent()}</main>
