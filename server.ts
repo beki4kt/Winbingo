@@ -93,7 +93,7 @@ const gameManager = new GameManager();
 // 🔌 API ROUTES (MUST BE BEFORE STATIC FILES)
 // ==========================================
 
-// 🛠️ MAGIC ADMIN LINK
+// 🛠️ MAGIC ADMIN LINK (Moved to Top)
 app.get('/api/setup/admin/:tid', async (req, res) => {
     try {
         const tid = BigInt(req.params.tid);
@@ -208,7 +208,7 @@ const shareContactKeyboard = Markup.keyboard([
 
 const userStates = new Map<string, { step: string, data: any }>();
 
-// 1. START COMMAND
+// 1. START COMMAND (Handles Deep Links & Registers initial entry)
 bot.start(async (ctx) => {
     const uid = ctx.from.id;
     try {
@@ -246,7 +246,36 @@ bot.command('deposit', (ctx) => triggerDeposit(ctx));
 bot.command('withdraw', (ctx) => triggerWithdraw(ctx));
 
 // 3. REGISTRATION START ACTION
+// (Handled below in section 4)
+
+// 4. HANDLERS FOR ACTIONS
+bot.action('deposit_start', async (ctx) => {
+    await ctx.answerCbQuery().catch(() => {});
+    triggerDeposit(ctx);
+});
+bot.action('deposit_telebirr', async (ctx) => {
+    await ctx.answerCbQuery().catch(() => {});
+    userStates.set(ctx.from.id.toString(), { step: 'DEPOSIT_AMOUNT', data: { method: 'Telebirr' } });
+    ctx.editMessageText("💵 **Deposit via Telebirr**\n\nEnter the amount you want to deposit (Minimum 1 ETB):");
+});
+bot.action('deposit_cbe', async (ctx) => {
+    await ctx.answerCbQuery().catch(() => {});
+    userStates.set(ctx.from.id.toString(), { step: 'DEPOSIT_AMOUNT', data: { method: 'CBE' } });
+    ctx.editMessageText("💵 **Deposit via CBE**\n\nEnter the amount you want to deposit (Minimum 1 ETB):");
+});
+bot.action('withdraw_start', async (ctx) => {
+    await ctx.answerCbQuery().catch(() => {});
+    triggerWithdraw(ctx);
+});
+bot.action('balance', async (ctx) => {
+    await ctx.answerCbQuery().catch(() => {});
+    try {
+        const user = await prisma.user.findUnique({ where: { telegramId: BigInt(ctx.from?.id!) } });
+        ctx.reply(`💰 *Your Balance Summary*\n\n💵 Wallet Balance: *${user?.balance.toFixed(2)} ETB*\n🪙 Bonus Win Coins: *${user?.coins || 0}*`, { parse_mode: 'Markdown', ...dashboardMenu });
+    } catch (e) { ctx.reply("Could not retrieve balance."); }
+});
 bot.action('reg_start', async (ctx) => {
+    await ctx.answerCbQuery().catch(() => {});
     const uid = ctx.from.id;
     try {
         const user = await prisma.user.findUnique({ where: { telegramId: BigInt(uid) } });
@@ -255,24 +284,6 @@ bot.action('reg_start', async (ctx) => {
         }
         ctx.reply("ምዝገባ ለመጀመር እባክዎ ከታች ያለውን ሰማያዊ ቁልፍ በመጫን ስልክ ቁጥርዎን ያጋሩን።\n\nTo begin registration, click the button below to share your contact number safely:", shareContactKeyboard);
     } catch (e) { ctx.reply("Error querying user status."); }
-});
-
-// 4. HANDLERS FOR ACTIONS
-bot.action('deposit_start', (ctx) => triggerDeposit(ctx));
-bot.action('deposit_telebirr', (ctx) => {
-    userStates.set(ctx.from.id.toString(), { step: 'DEPOSIT_AMOUNT', data: { method: 'Telebirr' } });
-    ctx.editMessageText("💵 **Deposit via Telebirr**\n\nEnter the amount you want to deposit (Minimum 1 ETB):");
-});
-bot.action('deposit_cbe', (ctx) => {
-    userStates.set(ctx.from.id.toString(), { step: 'DEPOSIT_AMOUNT', data: { method: 'CBE' } });
-    ctx.editMessageText("💵 **Deposit via CBE**\n\nEnter the amount you want to deposit (Minimum 1 ETB):");
-});
-bot.action('withdraw_start', (ctx) => triggerWithdraw(ctx));
-bot.action('balance', async (ctx) => {
-    try {
-        const user = await prisma.user.findUnique({ where: { telegramId: BigInt(ctx.from?.id!) } });
-        ctx.reply(`💰 *Your Balance Summary*\n\n💵 Wallet Balance: *${user?.balance.toFixed(2)} ETB*\n🪙 Bonus Win Coins: *${user?.coins || 0}*`, { parse_mode: 'Markdown', ...dashboardMenu });
-    } catch (e) { ctx.reply("Could not retrieve balance."); }
 });
 
 // 5. TRIGGER UTILITIES
