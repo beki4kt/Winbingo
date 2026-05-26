@@ -8,6 +8,7 @@ import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import { PrismaClient } from '@prisma/client';
 import cors from 'cors';
+import { verify as verifyCBE } from '@jvhaile/cbe-verifier';
 
 dotenv.config();
 
@@ -23,11 +24,11 @@ app.use(express.json());
 app.use(cors());
 
 // --- 🤖 BOT SETUP ---
-const botToken = process.env.BOT_TOKEN;
+const botToken = process.env.BOT_TOKEN || '8572602423:AAFv798LVotVnWRF4vcu6eg00OByN0CKqRQ';
 if (!botToken) { 
     console.error("❌ CRITICAL ERROR: BOT_TOKEN is missing!"); 
 }
-const bot = new Telegraf(botToken || 'YOUR_TOKEN_HERE'); // Fallback to avoid crash, but won't work
+const bot = new Telegraf(botToken);
 
 // 🚀 CACHE BUSTER ADDED HERE: Appends ?v=2 to force Telegram to download the latest Vercel build
 const baseAppUrl = process.env.APP_URL || 'https://winbingoet1.vercel.app';
@@ -258,6 +259,14 @@ bot.action('reg_start', async (ctx) => {
 
 // 4. HANDLERS FOR ACTIONS
 bot.action('deposit_start', (ctx) => triggerDeposit(ctx));
+bot.action('deposit_telebirr', (ctx) => {
+    userStates.set(ctx.from.id.toString(), { step: 'DEPOSIT_AMOUNT', data: { method: 'Telebirr' } });
+    ctx.editMessageText("💵 **Deposit via Telebirr**\n\nEnter the amount you want to deposit (Minimum 1 ETB):");
+});
+bot.action('deposit_cbe', (ctx) => {
+    userStates.set(ctx.from.id.toString(), { step: 'DEPOSIT_AMOUNT', data: { method: 'CBE' } });
+    ctx.editMessageText("💵 **Deposit via CBE**\n\nEnter the amount you want to deposit (Minimum 1 ETB):");
+});
 bot.action('withdraw_start', (ctx) => triggerWithdraw(ctx));
 bot.action('balance', async (ctx) => {
     try {
@@ -268,13 +277,18 @@ bot.action('balance', async (ctx) => {
 
 // 5. TRIGGER UTILITIES
 function triggerDeposit(ctx: any) {
-    userStates.set(ctx.from.id.toString(), { step: 'DEPOSIT_AMOUNT', data: {} });
-    ctx.reply("💵 **Manual Deposit via Telebirr**\n\nEnter the amount you want to deposit (Minimum 50 ETB):", cancelKeyboard);
+    userStates.set(ctx.from.id.toString(), { step: 'DEPOSIT_METHOD', data: {} });
+    ctx.reply("💵 **Deposit Funds**\n\nPlease select your preferred payment method:", Markup.inlineKeyboard([
+        [
+            Markup.button.callback('Telebirr', 'deposit_telebirr'),
+            Markup.button.callback('CBE', 'deposit_cbe')
+        ]
+    ]));
 }
 
 function triggerWithdraw(ctx: any) {
     userStates.set(ctx.from.id.toString(), { step: 'WITHDRAW_AMOUNT', data: {} });
-    ctx.reply("🏦 **Manual Withdrawal via Telebirr**\n\nEnter the amount you wish to withdraw (Minimum 100 ETB):", cancelKeyboard);
+    ctx.reply("🏦 **Withdrawal via Telebirr or CBE**\n\nEnter the amount you wish to withdraw (Minimum 100 ETB):", cancelKeyboard);
 }
 
 // 6. CONTACT CALLBACK AND STATE STEPPERS
@@ -324,22 +338,86 @@ bot.on('text', async (ctx) => {
     // --- DEPOSIT FLOW ---
     if (state.step === 'DEPOSIT_AMOUNT') {
         const amount = parseFloat(text);
-        if (isNaN(amount) || amount < 50) return ctx.reply("⚠️ Deposit failed. Minimum payment entry is 50 ETB. Please input a valid amount:");
+        if (isNaN(amount) || amount < 1) return ctx.reply("⚠️ Deposit failed. Minimum payment entry is 1 ETB. Please input a valid amount:");
         
-        ctx.reply(`💸 **Payment Guide (${amount} ETB)**\n\n1. Open your Telebirr app and send funds to our treasury merchant/phone:\n👉 \`0919184337\`\n\n2. Once paid, copy the Transaction Reference code or SMS confirmation text and paste it right here:`, cancelKeyboard);
-        userStates.set(uid, { step: 'DEPOSIT_CONFIRM', data: { amount } });
+        const method = state.data.method;
+        const cbeAccount = process.env.CBE_ACCOUNT_NUMBER || '1000123456789';
+        
+        if (method === 'CBE') {
+            ctx.reply(`💸 **Payment Guide (${amount} ETB)**\n\n1. Send funds to our CBE account:\n👉 \`${cbeAccount}\`\n\n2. Once paid, paste the full CBE SMS confirmation text here:`, cancelKeyboard);
+        } else {
+            ctx.reply(`💸 **Payment Guide (${amount} ETB)**\n\n1. Send funds to our Telebirr account:\n👉 \`0919184337\`\n\n2. Once paid, paste the Transaction Reference code here:`, cancelKeyboard);
+        }
+        userStates.set(uid, { step: 'DEPOSIT_CONFIRM', data: { amount, method } });
     }
     else if (state.step === 'DEPOSIT_CONFIRM') {
         const user = await prisma.user.findUnique({ where: { telegramId: BigInt(uid) } });
         if (!user) return ctx.reply("User profile context error.");
+
+        const cbeMatch = text.match(/FT\w{10}/);
+        let method = state.data.method || 'Telebirr';
+        let ref = text;
+
+        if (cbeMatch || method === 'CBE') {
+            method = 'CBE';
+            ref = cbeMatch ? cbeMatch[0] : text;
+            const verificationUrl = process.env.CBE_VERIFICATION_URL;
+            const cbeAccount = process.env.CBE_ACCOUNT_NUMBER || '1000123456789';
+            
+            if (verificationUrl) {
+                ctx.reply("⏳ Automatically verifying CBE Transaction...");
+                try {
+                    const result = await verifyCBE({
+                        transactionId: ref,
+                        accountNumberOfSenderOrReceiver: cbeAccount,
+                        cbeVerificationUrl: verificationUrl,
+                    });
+
+                    if (result.isRight()) {
+                        const txDetail: any = result.extract();
+                        if (txDetail.amount && txDetail.amount >= state.data.amount) {
+                            await prisma.$transaction([
+                                prisma.transaction.create({
+                                    data: {
+                                        userId: user.id,
+                                        type: 'DEPOSIT',
+                                        amount: txDetail.amount,
+                                        method: 'CBE',
+                                        ref: ref,
+                                        status: 'APPROVED'
+                                    }
+                                }),
+                                prisma.user.update({
+                                    where: { id: user.id },
+                                    data: { balance: { increment: txDetail.amount } }
+                                })
+                            ]);
+                            ctx.reply(`✅ **CBE Transaction Verified!**\n\nAmount: ${txDetail.amount} ETB\nRef: ${ref}\n\nYour balance has been updated instantly.`, Markup.removeKeyboard());
+                            userStates.delete(uid);
+                            return;
+                        } else {
+                            ctx.reply(`⚠️ Verification succeeded, but the transferred amount (${txDetail.amount} ETB) is less than the requested (${state.data.amount} ETB). Queued for manual admin review.`);
+                        }
+                    } else {
+                        const err = result.extract();
+                        const errMsg = typeof err === 'object' && err !== null && 'type' in err ? err.type : 'Unknown';
+                        ctx.reply(`❌ Auto-verification failed: ${errMsg}. Queuing for manual review...`);
+                    }
+                } catch (err: any) {
+                    ctx.reply("❌ Auto-verification encountered an error. Queuing for manual review...");
+                }
+            } else {
+                ctx.reply("⚠️ CBE Verification is not fully configured on the server. Queuing for manual review...");
+            }
+        }
 
         await prisma.transaction.create({
             data: {
                 userId: user.id,
                 type: 'DEPOSIT',
                 amount: state.data.amount,
-                method: 'Telebirr',
-                ref: text,
+                method: method,
+                ref: ref,
                 status: 'PENDING'
             }
         });
