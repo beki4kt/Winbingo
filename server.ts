@@ -28,7 +28,10 @@ if (!botToken) {
     console.error("❌ CRITICAL ERROR: BOT_TOKEN is missing!"); 
 }
 const bot = new Telegraf(botToken || 'YOUR_TOKEN_HERE'); // Fallback to avoid crash, but won't work
-const appUrl = process.env.APP_URL || 'https://winbingo.fly.dev';
+
+// 🚀 CACHE BUSTER ADDED HERE: Appends ?v=2 to force Telegram to download the latest Vercel build
+const baseAppUrl = process.env.APP_URL || 'https://winbingoet1.vercel.app';
+const appUrl = `${baseAppUrl}?v=2`; 
 
 // --- 🧠 GAME MANAGER (Multiplayer Logic) ---
 class GameManager {
