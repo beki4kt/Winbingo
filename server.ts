@@ -31,7 +31,7 @@ const bot = new Telegraf(botToken || 'YOUR_TOKEN_HERE'); // Fallback to avoid cr
 
 // 🚀 CACHE BUSTER ADDED HERE: Appends ?v=2 to force Telegram to download the latest Vercel build
 const baseAppUrl = process.env.APP_URL || 'https://winbingoet1.vercel.app';
-const appUrl = `${baseAppUrl}?v=2`; 
+const appUrl = `${baseAppUrl}?v=3`; 
 
 // --- 🧠 GAME MANAGER (Multiplayer Logic) ---
 class GameManager {
